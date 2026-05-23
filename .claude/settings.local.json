@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --version)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm test *)",
+      "Bash(pkill -f \"cargo test\")",
+      "Bash(pkill -f rustc)"
+    ]
+  }
+}

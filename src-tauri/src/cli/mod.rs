@@ -1,0 +1,212 @@
+//! CLI サブシステム (Step 9 / spec §7).
+//!
+//! - `args`   : argv → コマンド (pure)
+//! - `db`     : rusqlite 経由のCRUD
+//! - `output` : 標準出力フォーマット (pure)
+//!
+//! [`try_dispatch`] が `Some(exit_code)` を返したら GUI を起動せず終了する。
+
+pub mod args;
+pub mod db;
+pub mod output;
+
+/// argvにCLIサブコマンドがあれば実行して終了コードを返す。
+/// `None` の場合はGUI起動へ委ねる。
+pub fn try_dispatch(argv: &[String]) -> Option<i32> {
+    match args::parse_args(argv) {
+        args::ParseOutcome::NotCli => None,
+        args::ParseOutcome::Help(msg) => {
+            println!("{msg}");
+            Some(0)
+        }
+        args::ParseOutcome::Error(msg) => {
+            eprintln!("error: {msg}");
+            Some(2)
+        }
+        args::ParseOutcome::Parsed(p) => Some(execute(p)),
+    }
+}
+
+fn execute(p: args::ParsedCli) -> i32 {
+    let path = match p.global.db_path {
+        Some(s) => std::path::PathBuf::from(s),
+        None => match db::default_db_path() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        },
+    };
+    let conn = match db::open_db(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+
+    match p.command {
+        args::CliCommand::Add(a) => match db::add_task(
+            &conn,
+            db::AddInput {
+                project: &a.project,
+                status: &a.status,
+                title: &a.title,
+                memo: a.memo.as_deref(),
+                due: a.due.as_deref(),
+                priority: a.priority,
+            },
+        ) {
+            Ok(r) => {
+                println!(
+                    "{}",
+                    output::format_add_success(&r.id, &r.project_name, &r.column_name)
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        args::CliCommand::List(l) => match db::list_tasks(
+            &conn,
+            db::ListFilter {
+                project: l.project.as_deref(),
+                status: l.status.as_deref(),
+            },
+        ) {
+            Ok(rows) => {
+                print!("{}", output::format_list(&rows));
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        args::CliCommand::Move(m) => match db::move_task(&conn, &m.id, &m.status) {
+            Ok(r) => {
+                println!("{}", output::format_move_success(&r.id, &r.status));
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        args::CliCommand::Done(d) => match db::done_task(&conn, &d.id) {
+            Ok(r) => {
+                println!("{}", output::format_done_success(&r.id));
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn no_args_returns_none_for_gui() {
+        assert_eq!(try_dispatch(&argv(&["app.exe"])), None);
+    }
+
+    #[test]
+    fn quick_flag_returns_none_for_gui() {
+        assert_eq!(try_dispatch(&argv(&["app.exe", "--quick"])), None);
+    }
+
+    #[test]
+    fn help_returns_zero() {
+        assert_eq!(try_dispatch(&argv(&["app.exe", "task", "--help"])), Some(0));
+    }
+
+    #[test]
+    fn parse_error_returns_two() {
+        assert_eq!(try_dispatch(&argv(&["app.exe", "task", "unknown"])), Some(2));
+    }
+
+    #[test]
+    fn end_to_end_add_list_move_done() {
+        // tempfile を入れずに ulid 名でテンポラリDBパスを作る
+        let tmp = std::env::temp_dir().join(format!("memori-cli-{}.sqlite", ulid::Ulid::new()));
+        let path_str = tmp.to_string_lossy().to_string();
+
+        // セットアップ: GUIマイグレーション相当をテスト用に流す
+        {
+            let conn = db::open_db(&tmp).unwrap();
+            db::init_schema_for_test(&conn).unwrap();
+            use rusqlite::params;
+            let ts = "2026-05-23T00:00:00.000Z";
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                params!["pid", "Dev", ts, ts],
+            )
+            .unwrap();
+            for (cid, name, pos) in [("c1", "Todo", 0), ("c2", "Done", 1)] {
+                conn.execute(
+                    "INSERT INTO columns (id, project_id, name, position) VALUES (?, ?, ?, ?)",
+                    params![cid, "pid", name, pos],
+                )
+                .unwrap();
+            }
+        }
+
+        // add
+        let code = try_dispatch(&argv(&[
+            "app.exe",
+            "task",
+            "add",
+            "--db",
+            &path_str,
+            "--title",
+            "hello",
+            "--project",
+            "Dev",
+            "--status",
+            "Todo",
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        // 作成されたタスクIDを取得
+        let id: String = {
+            let conn = db::open_db(&tmp).unwrap();
+            conn.query_row("SELECT id FROM tasks LIMIT 1", [], |r| r.get(0))
+                .unwrap()
+        };
+
+        // list
+        let code = try_dispatch(&argv(&["app.exe", "task", "list", "--db", &path_str])).unwrap();
+        assert_eq!(code, 0);
+
+        // done
+        let code = try_dispatch(&argv(&["app.exe", "task", "done", "--db", &path_str, &id])).unwrap();
+        assert_eq!(code, 0);
+
+        // 検証: column_id = c2
+        {
+            use rusqlite::params;
+            let conn = db::open_db(&tmp).unwrap();
+            let col: String = conn
+                .query_row("SELECT column_id FROM tasks WHERE id = ?", params![id], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            assert_eq!(col, "c2");
+        }
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+}

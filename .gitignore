@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+.pnpm-store/
+
+# Build output
+dist
+dist-ssr
+*.tsbuildinfo
+
+# Test / Coverage
+coverage
+.nyc_output
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# Tauri
+src-tauri/target
+src-tauri/gen
+src-tauri/WixTools
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.swp
+*.swo
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# tsc が生成する設定ファイル(*.ts 版が正)
+vite.config.js
+vitest.config.js
