@@ -36,6 +36,75 @@ pub fn format_done_success(id: &str) -> String {
     format!("done: {id}")
 }
 
+// ── project 出力 ──
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectListRow {
+    pub id: String,
+    pub name: String,
+    pub column_count: i64,
+    pub task_count: i64,
+}
+
+pub fn format_project_add_success(id: &str, name: &str, columns: &[String]) -> String {
+    let cols = columns.join(", ");
+    format!("created: {id}  [{name}]  columns: {cols}")
+}
+
+pub fn format_project_list(rows: &[ProjectListRow]) -> String {
+    if rows.is_empty() {
+        return "(プロジェクトなし)".to_string();
+    }
+
+    let mut w_id = "ID".len();
+    let mut w_name = "NAME".len();
+    let mut w_cols = "COLUMNS".len();
+    let mut w_tasks = "TASKS".len();
+    for r in rows {
+        w_id = w_id.max(display_width(&r.id));
+        w_name = w_name.max(display_width(&r.name));
+        w_cols = w_cols.max(display_width(&r.column_count.to_string()));
+        w_tasks = w_tasks.max(display_width(&r.task_count.to_string()));
+    }
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{id}{p1}  {name}{p2}  {cols}{p3}  {tasks}\n",
+        id = "ID",
+        p1 = pad("ID", w_id),
+        name = "NAME",
+        p2 = pad("NAME", w_name),
+        cols = "COLUMNS",
+        p3 = pad("COLUMNS", w_cols),
+        tasks = "TASKS",
+    ));
+    for r in rows {
+        let cols = r.column_count.to_string();
+        let tasks = r.task_count.to_string();
+        out.push_str(&format!(
+            "{id}{p1}  {name}{p2}  {cols}{p3}  {tasks}\n",
+            id = r.id,
+            p1 = pad(&r.id, w_id),
+            name = r.name,
+            p2 = pad(&r.name, w_name),
+            cols = cols,
+            p3 = pad(&cols, w_cols),
+            tasks = tasks,
+        ));
+    }
+    out
+}
+
+pub fn format_project_rename_success(id: &str, old_name: &str, new_name: &str) -> String {
+    format!("renamed: {id}  {old_name} → {new_name}")
+}
+
+pub fn format_project_delete_success(id: &str, name: &str) -> String {
+    format!("deleted: {id}  [{name}]")
+}
+
+// ── task 出力 ──
+
 /// listを固定幅で整形。0件時は専用メッセージ。
 pub fn format_list(rows: &[TaskListRow]) -> String {
     if rows.is_empty() {
@@ -176,6 +245,68 @@ mod tests {
     fn list_empty_returns_placeholder() {
         assert_eq!(format_list(&[]), "(該当タスクなし)");
     }
+
+    // ── project output tests ──
+
+    #[test]
+    fn project_add_success_message() {
+        let cols = vec!["Todo".into(), "In Progress".into(), "Done".into()];
+        assert_eq!(
+            format_project_add_success("01HX", "開発", &cols),
+            "created: 01HX  [開発]  columns: Todo, In Progress, Done"
+        );
+    }
+
+    #[test]
+    fn project_list_empty_returns_placeholder() {
+        assert_eq!(format_project_list(&[]), "(プロジェクトなし)");
+    }
+
+    #[test]
+    fn project_list_includes_header_and_rows() {
+        let rows = vec![
+            ProjectListRow {
+                id: "01HX".into(),
+                name: "開発".into(),
+                column_count: 3,
+                task_count: 12,
+            },
+            ProjectListRow {
+                id: "01HY".into(),
+                name: "個人".into(),
+                column_count: 2,
+                task_count: 5,
+            },
+        ];
+        let out = format_project_list(&rows);
+        assert!(out.contains("ID"));
+        assert!(out.contains("NAME"));
+        assert!(out.contains("COLUMNS"));
+        assert!(out.contains("TASKS"));
+        assert!(out.contains("01HX"));
+        assert!(out.contains("開発"));
+        assert!(out.contains("12"));
+        assert!(out.contains("01HY"));
+        assert!(out.contains("個人"));
+    }
+
+    #[test]
+    fn project_rename_success_message() {
+        assert_eq!(
+            format_project_rename_success("01HX", "旧", "新"),
+            "renamed: 01HX  旧 → 新"
+        );
+    }
+
+    #[test]
+    fn project_delete_success_message() {
+        assert_eq!(
+            format_project_delete_success("01HX", "開発"),
+            "deleted: 01HX  [開発]"
+        );
+    }
+
+    // ── task output tests ──
 
     #[test]
     fn list_includes_header_and_rows() {

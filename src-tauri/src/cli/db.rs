@@ -10,7 +10,7 @@ use chrono::SecondsFormat;
 use rusqlite::{params, Connection, OptionalExtension};
 use ulid::Ulid;
 
-use super::output::TaskListRow;
+use super::output::{ProjectListRow, TaskListRow};
 
 const APP_IDENTIFIER: &str = "com.memori.app";
 const DB_FILENAME: &str = "kanban.db";
@@ -133,9 +133,9 @@ pub struct ListFilter<'a> {
 
 pub fn list_tasks(conn: &Connection, filter: ListFilter<'_>) -> Result<Vec<TaskListRow>, String> {
     let mut sql = String::from(
-        "SELECT t.id, p.name, c.name, t.priority, t.due_date, t.title\
-         FROM tasks t\
-         JOIN projects p ON p.id = t.project_id\
+        "SELECT t.id, p.name, c.name, t.priority, t.due_date, t.title \
+         FROM tasks t \
+         JOIN projects p ON p.id = t.project_id \
          JOIN columns c ON c.id = t.column_id",
     );
     let mut wheres: Vec<&str> = Vec::new();
@@ -214,6 +214,199 @@ pub fn move_task(conn: &Connection, id: &str, status: &str) -> Result<MoveResult
 /// `done` は `move` の `--status "Done"` 別名 (ユーザー選択により)。
 pub fn done_task(conn: &Connection, id: &str) -> Result<MoveResult, String> {
     move_task(conn, id, "Done")
+}
+
+// ── project CRUD ──
+
+const DEFAULT_COLUMNS: &[&str] = &["Todo", "In Progress", "Done"];
+
+#[derive(Debug, Clone)]
+pub struct ProjectAddResult {
+    pub id: String,
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
+pub fn add_project(
+    conn: &Connection,
+    name: &str,
+    columns: Option<&[String]>,
+) -> Result<ProjectAddResult, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("プロジェクト名は必須です".into());
+    }
+
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM projects WHERE name = ?",
+            params![name],
+            |r| r.get(0),
+        )
+        .map_err(|e| format!("重複チェック失敗: {e}"))?;
+
+    if exists {
+        return Err(format!("プロジェクトは既に存在します: {name}"));
+    }
+
+    let col_names: Vec<String> = match columns {
+        Some(cols) => cols.to_vec(),
+        None => DEFAULT_COLUMNS.iter().map(|s| s.to_string()).collect(),
+    };
+
+    let id = new_ulid();
+    let ts = now_iso();
+
+    conn.execute_batch("BEGIN;")
+        .map_err(|e| format!("トランザクション開始失敗: {e}"))?;
+
+    let result = (|| -> Result<(), String> {
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            params![id, name, ts, ts],
+        )
+        .map_err(|e| format!("プロジェクト作成失敗: {e}"))?;
+
+        for (i, col_name) in col_names.iter().enumerate() {
+            let col_id = new_ulid();
+            conn.execute(
+                "INSERT INTO columns (id, project_id, name, position) VALUES (?, ?, ?, ?)",
+                params![col_id, id, col_name, i as i64],
+            )
+            .map_err(|e| format!("列作成失敗: {e}"))?;
+        }
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute_batch("COMMIT;")
+                .map_err(|e| format!("コミット失敗: {e}"))?;
+            Ok(ProjectAddResult {
+                id,
+                name: name.to_string(),
+                columns: col_names,
+            })
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(e)
+        }
+    }
+}
+
+pub fn list_projects_summary(conn: &Connection) -> Result<Vec<ProjectListRow>, String> {
+    let sql = "\
+        SELECT p.id, p.name, \
+               (SELECT COUNT(*) FROM columns c WHERE c.project_id = p.id) AS col_count, \
+               (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count \
+        FROM projects p \
+        ORDER BY p.name ASC";
+
+    let mut stmt = conn.prepare(sql).map_err(|e| format!("SQL準備失敗: {e}"))?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(ProjectListRow {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                column_count: r.get(2)?,
+                task_count: r.get(3)?,
+            })
+        })
+        .map_err(|e| format!("list実行失敗: {e}"))?;
+
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(|e| format!("行取得失敗: {e}"))?);
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectRenameResult {
+    pub id: String,
+    pub old_name: String,
+    pub new_name: String,
+}
+
+pub fn rename_project(
+    conn: &Connection,
+    id: &str,
+    new_name: &str,
+) -> Result<ProjectRenameResult, String> {
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
+        return Err("プロジェクト名は必須です".into());
+    }
+
+    let old_name: String = conn
+        .query_row(
+            "SELECT name FROM projects WHERE id = ?",
+            params![id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("プロジェクト取得失敗: {e}"))?
+        .ok_or_else(|| format!("プロジェクトが見つかりません: {id}"))?;
+
+    let ts = now_iso();
+    conn.execute(
+        "UPDATE projects SET name = ?, updated_at = ? WHERE id = ?",
+        params![new_name, ts, id],
+    )
+    .map_err(|e| format!("プロジェクト更新失敗: {e}"))?;
+
+    Ok(ProjectRenameResult {
+        id: id.to_string(),
+        old_name,
+        new_name: new_name.to_string(),
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectDeleteResult {
+    pub id: String,
+    pub name: String,
+}
+
+pub fn delete_project(
+    conn: &Connection,
+    id: &str,
+    force: bool,
+) -> Result<ProjectDeleteResult, String> {
+    let name: String = conn
+        .query_row(
+            "SELECT name FROM projects WHERE id = ?",
+            params![id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("プロジェクト取得失敗: {e}"))?
+        .ok_or_else(|| format!("プロジェクトが見つかりません: {id}"))?;
+
+    if !force {
+        let task_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = ?",
+                params![id],
+                |r| r.get(0),
+            )
+            .map_err(|e| format!("タスク数取得失敗: {e}"))?;
+
+        if task_count > 0 {
+            return Err(format!(
+                "プロジェクト「{name}」には {task_count} 件のタスクがあります。削除するには --force を指定してください"
+            ));
+        }
+    }
+
+    conn.execute("DELETE FROM projects WHERE id = ?", params![id])
+        .map_err(|e| format!("プロジェクト削除失敗: {e}"))?;
+
+    Ok(ProjectDeleteResult {
+        id: id.to_string(),
+        name,
+    })
 }
 
 #[cfg(test)]
@@ -534,5 +727,229 @@ mod tests {
         .unwrap();
         let err = done_task(&conn, &added.id).unwrap_err();
         assert!(err.contains("Done") || err.contains("列"));
+    }
+
+    // ── project CRUD tests ──
+
+    #[test]
+    fn add_project_creates_with_default_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let r = add_project(&conn, "テスト", None).unwrap();
+        assert_eq!(r.name, "テスト");
+        assert_eq!(r.columns, vec!["Todo", "In Progress", "Done"]);
+
+        let col_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM columns WHERE project_id = ?",
+                params![r.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(col_count, 3);
+    }
+
+    #[test]
+    fn add_project_with_custom_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let cols = vec!["A".into(), "B".into()];
+        let r = add_project(&conn, "カスタム", Some(&cols)).unwrap();
+        assert_eq!(r.columns, vec!["A", "B"]);
+
+        let col_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM columns WHERE project_id = ?",
+                params![r.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(col_count, 2);
+    }
+
+    #[test]
+    fn add_project_duplicate_name_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        add_project(&conn, "Dup", None).unwrap();
+        let err = add_project(&conn, "Dup", None).unwrap_err();
+        assert!(err.contains("既に存在"));
+    }
+
+    #[test]
+    fn add_project_empty_name_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let err = add_project(&conn, "  ", None).unwrap_err();
+        assert!(err.contains("プロジェクト名は必須"));
+    }
+
+    #[test]
+    fn list_projects_empty() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let rows = list_projects_summary(&conn).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn list_projects_counts_columns_and_tasks() {
+        let conn = fixture();
+        // fixture: proj-1 "Dev" has 3 columns, proj-2 "Other" has 1 column
+        // add tasks to Dev
+        add_task(
+            &conn,
+            AddInput {
+                project: "Dev",
+                status: "Todo",
+                title: "a",
+                memo: None,
+                due: None,
+                priority: None,
+            },
+        )
+        .unwrap();
+        add_task(
+            &conn,
+            AddInput {
+                project: "Dev",
+                status: "Done",
+                title: "b",
+                memo: None,
+                due: None,
+                priority: None,
+            },
+        )
+        .unwrap();
+
+        let rows = list_projects_summary(&conn).unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let dev = rows.iter().find(|r| r.name == "Dev").unwrap();
+        assert_eq!(dev.column_count, 3);
+        assert_eq!(dev.task_count, 2);
+
+        let other = rows.iter().find(|r| r.name == "Other").unwrap();
+        assert_eq!(other.column_count, 1);
+        assert_eq!(other.task_count, 0);
+    }
+
+    #[test]
+    fn rename_project_updates_name() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let added = add_project(&conn, "旧名", None).unwrap();
+        let r = rename_project(&conn, &added.id, "新名").unwrap();
+        assert_eq!(r.old_name, "旧名");
+        assert_eq!(r.new_name, "新名");
+
+        let name: String = conn
+            .query_row(
+                "SELECT name FROM projects WHERE id = ?",
+                params![added.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "新名");
+    }
+
+    #[test]
+    fn rename_project_unknown_id_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let err = rename_project(&conn, "no-such-id", "X").unwrap_err();
+        assert!(err.contains("見つかりません"));
+    }
+
+    #[test]
+    fn delete_project_without_tasks() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let added = add_project(&conn, "削除対象", None).unwrap();
+        let r = delete_project(&conn, &added.id, false).unwrap();
+        assert_eq!(r.name, "削除対象");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?", params![added.id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn delete_project_with_tasks_no_force_errors() {
+        let conn = fixture();
+        add_task(
+            &conn,
+            AddInput {
+                project: "Dev",
+                status: "Todo",
+                title: "x",
+                memo: None,
+                due: None,
+                priority: None,
+            },
+        )
+        .unwrap();
+
+        let err = delete_project(&conn, "proj-1", false).unwrap_err();
+        assert!(err.contains("--force"));
+        assert!(err.contains("1 件"));
+    }
+
+    #[test]
+    fn delete_project_with_tasks_force_succeeds() {
+        let conn = fixture();
+        add_task(
+            &conn,
+            AddInput {
+                project: "Dev",
+                status: "Todo",
+                title: "x",
+                memo: None,
+                due: None,
+                priority: None,
+            },
+        )
+        .unwrap();
+
+        let r = delete_project(&conn, "proj-1", true).unwrap();
+        assert_eq!(r.name, "Dev");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?", params!["proj-1"], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // CASCADE check: tasks and columns should be deleted too
+        let task_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tasks WHERE project_id = ?", params!["proj-1"], |r| r.get(0))
+            .unwrap();
+        assert_eq!(task_count, 0);
+    }
+
+    #[test]
+    fn delete_project_unknown_id_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        init_schema_for_test(&conn).unwrap();
+
+        let err = delete_project(&conn, "no-such-id", false).unwrap_err();
+        assert!(err.contains("見つかりません"));
     }
 }

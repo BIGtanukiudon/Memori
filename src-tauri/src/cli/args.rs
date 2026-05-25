@@ -36,11 +36,33 @@ pub struct DoneArgs {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectAddArgs {
+    pub name: String,
+    pub columns: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectRenameArgs {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeleteArgs {
+    pub id: String,
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
     Add(AddArgs),
     List(ListArgs),
     Move(MoveArgs),
     Done(DoneArgs),
+    ProjectAdd(ProjectAddArgs),
+    ProjectList,
+    ProjectRename(ProjectRenameArgs),
+    ProjectDelete(ProjectDeleteArgs),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,8 +82,10 @@ pub enum ParseOutcome {
 }
 
 const TASK_SUBCOMMAND: &str = "task";
-const HELP_TEXT: &str = "\
-Memori CLI (spec §7)
+const PROJECT_SUBCOMMAND: &str = "project";
+
+const TASK_HELP_TEXT: &str = "\
+Memori CLI — task
 
 USAGE:
   app.exe task <SUBCOMMAND> [OPTIONS]
@@ -90,24 +114,64 @@ DONE:
   app.exe task done <id>
 ";
 
+const PROJECT_HELP_TEXT: &str = "\
+Memori CLI — project
+
+USAGE:
+  app.exe project <SUBCOMMAND> [OPTIONS]
+  app.exe project --help
+
+SUBCOMMANDS:
+  add      プロジェクトを新規作成
+  list     プロジェクト一覧を表示
+  rename   プロジェクト名を変更
+  delete   プロジェクトを削除
+
+GLOBAL OPTIONS:
+  --db <path>            SQLite DBパスを上書き
+
+ADD:
+  app.exe project add --name <N> [--columns <C1,C2,...>]
+  (--columns 省略時は Todo,In Progress,Done をデフォルト作成)
+
+LIST:
+  app.exe project list
+
+RENAME:
+  app.exe project rename <id> --name <N>
+
+DELETE:
+  app.exe project delete <id> [--force]
+";
+
+pub fn is_cli_argv(argv: &[String]) -> bool {
+    matches!(
+        argv.get(1).map(|s| s.as_str()),
+        Some(TASK_SUBCOMMAND) | Some(PROJECT_SUBCOMMAND)
+    )
+}
+
 pub fn parse_args(argv: &[String]) -> ParseOutcome {
-    // argv[0] は実行ファイル名。argv[1] が "task" でなければGUI。
     let mut iter = argv.iter().skip(1);
     let Some(first) = iter.next() else {
         return ParseOutcome::NotCli;
     };
-    if first != TASK_SUBCOMMAND {
-        return ParseOutcome::NotCli;
-    }
-
     let rest: Vec<String> = iter.cloned().collect();
 
+    match first.as_str() {
+        TASK_SUBCOMMAND => parse_task_command(&rest),
+        PROJECT_SUBCOMMAND => parse_project_command(&rest),
+        _ => ParseOutcome::NotCli,
+    }
+}
+
+fn parse_task_command(rest: &[String]) -> ParseOutcome {
     if rest.iter().any(|a| a == "--help" || a == "-h") {
-        return ParseOutcome::Help(HELP_TEXT.to_string());
+        return ParseOutcome::Help(TASK_HELP_TEXT.to_string());
     }
 
     let Some(sub) = rest.first() else {
-        return ParseOutcome::Help(HELP_TEXT.to_string());
+        return ParseOutcome::Help(TASK_HELP_TEXT.to_string());
     };
     let sub_args = &rest[1..];
 
@@ -116,6 +180,25 @@ pub fn parse_args(argv: &[String]) -> ParseOutcome {
         "list" => parse_list(sub_args),
         "move" => parse_move(sub_args),
         "done" => parse_done(sub_args),
+        other => ParseOutcome::Error(format!("未知のサブコマンド: {other}")),
+    }
+}
+
+fn parse_project_command(rest: &[String]) -> ParseOutcome {
+    if rest.iter().any(|a| a == "--help" || a == "-h") {
+        return ParseOutcome::Help(PROJECT_HELP_TEXT.to_string());
+    }
+
+    let Some(sub) = rest.first() else {
+        return ParseOutcome::Help(PROJECT_HELP_TEXT.to_string());
+    };
+    let sub_args = &rest[1..];
+
+    match sub.as_str() {
+        "add" => parse_project_add(sub_args),
+        "list" => parse_project_list(sub_args),
+        "rename" => parse_project_rename(sub_args),
+        "delete" => parse_project_delete(sub_args),
         other => ParseOutcome::Error(format!("未知のサブコマンド: {other}")),
     }
 }
@@ -286,6 +369,125 @@ fn parse_move(args: &[String]) -> ParseOutcome {
     ParseOutcome::Parsed(ParsedCli {
         global,
         command: CliCommand::Move(MoveArgs { id, status }),
+    })
+}
+
+fn parse_project_add(args: &[String]) -> ParseOutcome {
+    let mut tokens = match tokenize(args) {
+        Ok(t) => t,
+        Err(e) => return ParseOutcome::Error(e),
+    };
+    let global = extract_global(&mut tokens.flags);
+
+    if !tokens.positionals.is_empty() {
+        return ParseOutcome::Error(format!(
+            "project add は位置引数を取りません: {:?}",
+            tokens.positionals
+        ));
+    }
+
+    let name = match take_flag(&mut tokens.flags, "name") {
+        Some(v) => v,
+        None => return ParseOutcome::Error("add: --name は必須です".into()),
+    };
+    let columns = take_flag(&mut tokens.flags, "columns").map(|v| {
+        v.split(',').map(|s| s.trim().to_string()).collect()
+    });
+
+    if let Some((k, _)) = tokens.flags.first() {
+        return ParseOutcome::Error(format!("project add: 未知のフラグ --{k}"));
+    }
+
+    ParseOutcome::Parsed(ParsedCli {
+        global,
+        command: CliCommand::ProjectAdd(ProjectAddArgs { name, columns }),
+    })
+}
+
+fn parse_project_list(args: &[String]) -> ParseOutcome {
+    let mut tokens = match tokenize(args) {
+        Ok(t) => t,
+        Err(e) => return ParseOutcome::Error(e),
+    };
+    let global = extract_global(&mut tokens.flags);
+
+    if !tokens.positionals.is_empty() {
+        return ParseOutcome::Error(format!(
+            "project list は位置引数を取りません: {:?}",
+            tokens.positionals
+        ));
+    }
+
+    if let Some((k, _)) = tokens.flags.first() {
+        return ParseOutcome::Error(format!("project list: 未知のフラグ --{k}"));
+    }
+
+    ParseOutcome::Parsed(ParsedCli {
+        global,
+        command: CliCommand::ProjectList,
+    })
+}
+
+fn parse_project_rename(args: &[String]) -> ParseOutcome {
+    let mut tokens = match tokenize(args) {
+        Ok(t) => t,
+        Err(e) => return ParseOutcome::Error(e),
+    };
+    let global = extract_global(&mut tokens.flags);
+
+    let id = match tokens.positionals.len() {
+        1 => tokens.positionals.remove(0),
+        0 => return ParseOutcome::Error("rename: プロジェクトIDが必要です".into()),
+        _ => {
+            return ParseOutcome::Error(format!(
+                "rename: 位置引数が多すぎます: {:?}",
+                tokens.positionals
+            ))
+        }
+    };
+    let name = match take_flag(&mut tokens.flags, "name") {
+        Some(v) => v,
+        None => return ParseOutcome::Error("rename: --name は必須です".into()),
+    };
+
+    if let Some((k, _)) = tokens.flags.first() {
+        return ParseOutcome::Error(format!("rename: 未知のフラグ --{k}"));
+    }
+
+    ParseOutcome::Parsed(ParsedCli {
+        global,
+        command: CliCommand::ProjectRename(ProjectRenameArgs { id, name }),
+    })
+}
+
+fn parse_project_delete(args: &[String]) -> ParseOutcome {
+    let force = args.iter().any(|a| a == "--force");
+    let filtered: Vec<String> = args.iter().filter(|a| a.as_str() != "--force").cloned().collect();
+
+    let mut tokens = match tokenize(&filtered) {
+        Ok(t) => t,
+        Err(e) => return ParseOutcome::Error(e),
+    };
+    let global = extract_global(&mut tokens.flags);
+
+    let id = match tokens.positionals.len() {
+        1 => tokens.positionals.remove(0),
+        0 => return ParseOutcome::Error("delete: プロジェクトIDが必要です".into()),
+        _ => {
+            return ParseOutcome::Error(format!(
+                "delete: 位置引数が多すぎます: {:?}",
+                tokens.positionals
+            ))
+        }
+    };
+
+    if let Some((k, _)) = tokens.flags.first() {
+        return ParseOutcome::Error(format!("delete: 未知のフラグ --{k}"));
+    }
+
+    ParseOutcome::Parsed(ParsedCli {
+        global,
+        command: CliCommand::ProjectDelete(ProjectDeleteArgs { id, force }),
     })
 }
 
@@ -557,10 +759,199 @@ mod tests {
     }
 
     #[test]
+    fn is_cli_argv_detects_task_subcommand() {
+        assert!(is_cli_argv(&argv(&["app.exe", "task"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "task", "--help"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "task", "list"])));
+    }
+
+    #[test]
+    fn is_cli_argv_false_for_gui() {
+        assert!(!is_cli_argv(&argv(&["app.exe"])));
+        assert!(!is_cli_argv(&argv(&["app.exe", "--quick"])));
+    }
+
+    #[test]
     fn flag_without_value_errors() {
         match parse_args(&argv(&["app.exe", "task", "add", "--title"])) {
             ParseOutcome::Error(_) => {}
             other => panic!("got {other:?}"),
+        }
+    }
+
+    // ── project サブコマンド ──
+
+    #[test]
+    fn is_cli_argv_detects_project_subcommand() {
+        assert!(is_cli_argv(&argv(&["app.exe", "project"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "project", "--help"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "project", "list"])));
+    }
+
+    #[test]
+    fn project_help_flag_shows_help() {
+        match parse_args(&argv(&["app.exe", "project", "--help"])) {
+            ParseOutcome::Help(msg) => assert!(msg.contains("project")),
+            other => panic!("expected Help, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_without_subcommand_shows_help() {
+        match parse_args(&argv(&["app.exe", "project"])) {
+            ParseOutcome::Help(_) => {}
+            other => panic!("expected Help, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_unknown_subcommand_is_error() {
+        match parse_args(&argv(&["app.exe", "project", "unknown"])) {
+            ParseOutcome::Error(_) => {}
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_add_with_name() {
+        let parsed = parse_args(&argv(&["app.exe", "project", "add", "--name", "開発"]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(
+                    p.command,
+                    CliCommand::ProjectAdd(ProjectAddArgs {
+                        name: "開発".into(),
+                        columns: None,
+                    })
+                );
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_add_with_columns() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "project", "add", "--name", "X", "--columns", "A,B,C",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                let CliCommand::ProjectAdd(a) = p.command else {
+                    panic!("expected ProjectAdd");
+                };
+                assert_eq!(a.columns, Some(vec!["A".into(), "B".into(), "C".into()]));
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_add_missing_name_errors() {
+        match parse_args(&argv(&["app.exe", "project", "add"])) {
+            ParseOutcome::Error(m) => assert!(m.contains("--name")),
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_list_parses() {
+        match parse_args(&argv(&["app.exe", "project", "list"])) {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(p.command, CliCommand::ProjectList);
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_rename_parses() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "project", "rename", "01JXXX", "--name", "新名前",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(
+                    p.command,
+                    CliCommand::ProjectRename(ProjectRenameArgs {
+                        id: "01JXXX".into(),
+                        name: "新名前".into(),
+                    })
+                );
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_rename_missing_id_errors() {
+        match parse_args(&argv(&["app.exe", "project", "rename", "--name", "Y"])) {
+            ParseOutcome::Error(_) => {}
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_rename_missing_name_errors() {
+        match parse_args(&argv(&["app.exe", "project", "rename", "01JXXX"])) {
+            ParseOutcome::Error(m) => assert!(m.contains("--name")),
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_delete_without_force() {
+        let parsed = parse_args(&argv(&["app.exe", "project", "delete", "01JXXX"]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(
+                    p.command,
+                    CliCommand::ProjectDelete(ProjectDeleteArgs {
+                        id: "01JXXX".into(),
+                        force: false,
+                    })
+                );
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_delete_with_force() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "project", "delete", "01JXXX", "--force",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(
+                    p.command,
+                    CliCommand::ProjectDelete(ProjectDeleteArgs {
+                        id: "01JXXX".into(),
+                        force: true,
+                    })
+                );
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_delete_missing_id_errors() {
+        match parse_args(&argv(&["app.exe", "project", "delete"])) {
+            ParseOutcome::Error(_) => {}
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn project_global_db_flag() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "project", "list", "--db", "/tmp/test.db",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(p.global.db_path.as_deref(), Some("/tmp/test.db"));
+            }
+            other => panic!("expected Parsed, got {other:?}"),
         }
     }
 }

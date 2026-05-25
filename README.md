@@ -11,7 +11,7 @@ Windowsデスクトップ向けのカンバンタスク管理ツール。プロ�
 - **クイック入力ウィンドウ**: `app.exe --quick` で呼び出せる軽量入力ウィンドウ（AHK等のホットキーから利用）
 - **全タスク一覧ビュー**: プロジェクト横断でフィルタ・ソート可能なリストビュー
 - **シングルインスタンス制御**: 2重起動を防ぎ、既存プロセスへ argv を受け渡し
-- **CLIサブコマンド**: `app.exe task add/list/move/done` でAIエージェント（Claude Code等）や任意スクリプトからタスク操作
+- **CLIサブコマンド**: `app.exe task add/list/move/done` と `app.exe project add/list/rename/delete` でAIエージェント（Claude Code等）や任意スクリプトからタスク・プロジェクト操作
 
 ## 技術スタック
 
@@ -195,6 +195,40 @@ app.exe task --help
 
 **ウィンドウ同期との関係**: 上記「ウィンドウ間同期」セクションの通り、CLI更新ではイベント発火しません。GUI側はフォーカス復帰で再フェッチして反映します。
 
+## CLI（`app.exe project ...`）
+
+プロジェクトの作成・一覧・名前変更・削除をCLIから行えます。`task` サブコマンドと同様、GUIを起動せずSQLiteを直接操作します。
+
+```bash
+# プロジェクト作成（デフォルト列: Todo, In Progress, Done）
+app.exe project add --name "開発"
+
+# カスタム列でプロジェクト作成
+app.exe project add --name "企画" --columns "アイデア,検討中,採用,却下"
+
+# プロジェクト一覧
+app.exe project list
+
+# プロジェクト名変更
+app.exe project rename 01JXXX... --name "バックエンド開発"
+
+# プロジェクト削除（タスクがなければ即削除）
+app.exe project delete 01JXXX...
+
+# タスクがあっても強制削除
+app.exe project delete 01JXXX... --force
+
+# ヘルプ
+app.exe project --help
+```
+
+| サブコマンド | 必須引数 | 任意引数 |
+|---|---|---|
+| `add`    | `--name` | `--columns <C1,C2,...>`（省略時はデフォルト3列） |
+| `list`   | （なし） | — |
+| `rename` | `<id>` / `--name` | — |
+| `delete` | `<id>` | `--force`（タスクありでも強制削除） |
+
 ## 実装ステータス
 
 | # | 内容 | 状態 |
@@ -207,7 +241,7 @@ app.exe task --help
 | 6 | クイック入力ウィンドウ | ✅ |
 | 7 | シングルインスタンス制御 + AHK連携 | ✅ |
 | 8 | 全タスク一覧ビュー | ✅ |
-| 9 | CLIサブコマンド (`app.exe task add/list/move/done`) | ✅ |
+| 9 | CLIサブコマンド (`app.exe task ...` / `app.exe project ...`) | ✅ |
 | 10 | MCPサーバー実装 | 未着手 |
 
 ## ライセンス

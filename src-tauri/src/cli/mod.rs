@@ -106,6 +106,57 @@ fn execute(p: args::ParsedCli) -> i32 {
                 1
             }
         },
+        args::CliCommand::ProjectAdd(a) => {
+            match db::add_project(&conn, &a.name, a.columns.as_deref()) {
+                Ok(r) => {
+                    println!(
+                        "{}",
+                        output::format_project_add_success(&r.id, &r.name, &r.columns)
+                    );
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
+            }
+        }
+        args::CliCommand::ProjectList => match db::list_projects_summary(&conn) {
+            Ok(rows) => {
+                print!("{}", output::format_project_list(&rows));
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        args::CliCommand::ProjectRename(a) => match db::rename_project(&conn, &a.id, &a.name) {
+            Ok(r) => {
+                println!(
+                    "{}",
+                    output::format_project_rename_success(&r.id, &r.old_name, &r.new_name)
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
+        args::CliCommand::ProjectDelete(a) => match db::delete_project(&conn, &a.id, a.force) {
+            Ok(r) => {
+                println!(
+                    "{}",
+                    output::format_project_delete_success(&r.id, &r.name)
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                1
+            }
+        },
     }
 }
 
@@ -206,6 +257,72 @@ mod tests {
                 .unwrap();
             assert_eq!(col, "c2");
         }
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    // ── project 統合テスト ──
+
+    #[test]
+    fn project_help_returns_zero() {
+        assert_eq!(
+            try_dispatch(&argv(&["app.exe", "project", "--help"])),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn project_unknown_subcommand_returns_two() {
+        assert_eq!(
+            try_dispatch(&argv(&["app.exe", "project", "unknown"])),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn end_to_end_project_add_list_rename_delete() {
+        let tmp = std::env::temp_dir().join(format!("memori-cli-proj-{}.sqlite", ulid::Ulid::new()));
+        let path_str = tmp.to_string_lossy().to_string();
+
+        {
+            let conn = db::open_db(&tmp).unwrap();
+            db::init_schema_for_test(&conn).unwrap();
+        }
+
+        // project add
+        let code = try_dispatch(&argv(&[
+            "app.exe", "project", "add", "--db", &path_str, "--name", "開発",
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        // project list
+        let code = try_dispatch(&argv(&[
+            "app.exe", "project", "list", "--db", &path_str,
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        // get id
+        let id: String = {
+            let conn = db::open_db(&tmp).unwrap();
+            conn.query_row("SELECT id FROM projects LIMIT 1", [], |r| r.get(0))
+                .unwrap()
+        };
+
+        // project rename
+        let code = try_dispatch(&argv(&[
+            "app.exe", "project", "rename", "--db", &path_str, &id, "--name", "新開発",
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        // project delete
+        let code = try_dispatch(&argv(&[
+            "app.exe", "project", "delete", "--db", &path_str, &id,
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
 
         let _ = std::fs::remove_file(&tmp);
     }
