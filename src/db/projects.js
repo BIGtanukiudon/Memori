@@ -14,11 +14,13 @@ export async function createProject(db, name) {
     const trimmed = requireName(name);
     const id = newId();
     const ts = nowIso();
-    await db.execute("INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)", [id, trimmed, ts, ts]);
-    return { id, name: trimmed, createdAt: ts, updatedAt: ts };
+    const rows = await db.select("SELECT COALESCE(MAX(position), -1) + 1 AS next FROM projects");
+    const position = rows[0]?.next ?? 0;
+    await db.execute("INSERT INTO projects (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", [id, trimmed, position, ts, ts]);
+    return { id, name: trimmed, position, createdAt: ts, updatedAt: ts };
 }
 export async function listProjects(db) {
-    const rows = await db.select("SELECT id, name, created_at, updated_at FROM projects ORDER BY created_at ASC");
+    const rows = await db.select("SELECT id, name, position, created_at, updated_at FROM projects ORDER BY position ASC");
     return rows.map(rowToProject);
 }
 export async function renameProject(db, id, name) {
@@ -29,6 +31,11 @@ export async function renameProject(db, id, name) {
         ts,
         id,
     ]);
+}
+export async function reorderProjects(db, orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+        await db.execute("UPDATE projects SET position = ? WHERE id = ?", [i, orderedIds[i]]);
+    }
 }
 export async function deleteProject(db, id) {
     await db.execute("DELETE FROM projects WHERE id = ?", [id]);

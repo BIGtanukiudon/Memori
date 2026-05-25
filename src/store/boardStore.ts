@@ -16,6 +16,7 @@ export interface BoardState {
 
   upsertProject: (p: Project) => void;
   removeProject: (id: string) => void;
+  reorderProjects: (orderedIds: readonly string[]) => void;
 
   upsertColumn: (c: Column) => void;
   removeColumn: (id: string) => void;
@@ -71,6 +72,8 @@ export const useBoardStore = create<BoardState>((set) => ({
       projects: s.projects.filter((p) => p.id !== id),
       currentProjectId: s.currentProjectId === id ? null : s.currentProjectId,
     })),
+  reorderProjects: (orderedIds) =>
+    set((s) => ({ projects: renumberByOrder(s.projects, orderedIds) })),
 
   upsertColumn: (c) => set((s) => ({ columns: upsertById(s.columns, c) })),
   removeColumn: (id) =>

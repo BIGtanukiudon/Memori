@@ -6,6 +6,7 @@ import {
   renameProjectAction,
   deleteProjectAction,
   countTasksInProject,
+  reorderProjectsAction,
 } from "./projectActions";
 
 beforeEach(() => {
@@ -34,7 +35,7 @@ describe("createProjectAction", () => {
   it("既にcurrentが選択されていれば変更しない", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P0", name: "既存", createdAt: "", updatedAt: "" }],
+      projects: [{ id: "P0", name: "既存", position: 0, createdAt: "", updatedAt: "" }],
       currentProjectId: "P0",
     });
     const p = await createProjectAction(db, "別");
@@ -47,7 +48,7 @@ describe("renameProjectAction", () => {
   it("DB UPDATEとstore反映を行う", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P1", name: "旧", createdAt: "t0", updatedAt: "t0" }],
+      projects: [{ id: "P1", name: "旧", position: 0, createdAt: "t0", updatedAt: "t0" }],
     });
     await renameProjectAction(db, "P1", " 新 ");
 
@@ -66,8 +67,8 @@ describe("deleteProjectAction", () => {
     const db = createMockDb();
     useBoardStore.setState({
       projects: [
-        { id: "P1", name: "A", createdAt: "", updatedAt: "" },
-        { id: "P2", name: "B", createdAt: "", updatedAt: "" },
+        { id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" },
+        { id: "P2", name: "B", position: 1, createdAt: "", updatedAt: "" },
       ],
       currentProjectId: "P1",
       columns: [{ id: "C1", projectId: "P1", name: "Todo", position: 0 }],
@@ -89,11 +90,30 @@ describe("deleteProjectAction", () => {
   it("削除後にプロジェクトが0件ならcurrentはnull", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P1", name: "A", createdAt: "", updatedAt: "" }],
+      projects: [{ id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" }],
       currentProjectId: "P1",
     });
     await deleteProjectAction(db, "P1");
     expect(useBoardStore.getState().currentProjectId).toBeNull();
+  });
+});
+
+describe("reorderProjectsAction", () => {
+  it("DB並び替えとstore反映を行う", async () => {
+    const db = createMockDb();
+    useBoardStore.setState({
+      projects: [
+        { id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" },
+        { id: "P2", name: "B", position: 1, createdAt: "", updatedAt: "" },
+        { id: "P3", name: "C", position: 2, createdAt: "", updatedAt: "" },
+      ],
+    });
+
+    await reorderProjectsAction(db, ["P3", "P1", "P2"]);
+
+    expect(db.execute).toHaveBeenCalledTimes(3);
+    const ps = [...useBoardStore.getState().projects].sort((a, b) => a.position - b.position);
+    expect(ps.map((p) => p.id)).toEqual(["P3", "P1", "P2"]);
   });
 });
 

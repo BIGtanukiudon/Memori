@@ -12,15 +12,18 @@ const createProjectAction = vi.fn();
 const renameProjectAction = vi.fn();
 const deleteProjectAction = vi.fn();
 const countTasksInProject = vi.fn();
+const reorderProjectsAction = vi.fn();
 vi.mock("@/data/projectActions", () => ({
     createProjectAction: (...a) => createProjectAction(...a),
     renameProjectAction: (...a) => renameProjectAction(...a),
     deleteProjectAction: (...a) => deleteProjectAction(...a),
     countTasksInProject: (...a) => countTasksInProject(...a),
+    reorderProjectsAction: (...a) => reorderProjectsAction(...a),
 }));
-const proj = (id, name) => ({
+const proj = (id, name, position = 0) => ({
     id,
     name,
+    position,
     createdAt: "",
     updatedAt: "",
 });
@@ -31,6 +34,7 @@ describe("Sidebar", () => {
         renameProjectAction.mockReset();
         deleteProjectAction.mockReset();
         countTasksInProject.mockReset().mockResolvedValue(0);
+        reorderProjectsAction.mockReset().mockResolvedValue(undefined);
     });
     it("プロジェクト一覧を表示する", () => {
         useBoardStore.getState().setProjects([proj("P1", "開発"), proj("P2", "個人")]);
@@ -78,7 +82,7 @@ describe("Sidebar", () => {
     });
     it("「新規プロジェクト」ボタンで入力欄を表示しEnterで作成", async () => {
         const user = userEvent.setup();
-        createProjectAction.mockResolvedValue({ id: "P9", name: "新", createdAt: "", updatedAt: "" });
+        createProjectAction.mockResolvedValue({ id: "P9", name: "新", position: 0, createdAt: "", updatedAt: "" });
         render(_jsx(Sidebar, {}));
         await user.click(screen.getByRole("button", { name: "新規プロジェクト" }));
         const input = screen.getByPlaceholderText("プロジェクト名");
@@ -127,5 +131,39 @@ describe("Sidebar", () => {
         await waitFor(() => screen.getByRole("button", { name: "キャンセル" }));
         await user.click(screen.getByRole("button", { name: "キャンセル" }));
         expect(deleteProjectAction).not.toHaveBeenCalled();
+    });
+    describe("プロジェクト並び替え", () => {
+        it("先頭プロジェクトには上移動ボタンが無効", () => {
+            useBoardStore.getState().setProjects([proj("P1", "開発", 0), proj("P2", "個人", 1)]);
+            render(_jsx(Sidebar, {}));
+            const upBtn = screen.getByRole("button", { name: "開発を上へ" });
+            expect(upBtn).toBeDisabled();
+        });
+        it("末尾プロジェクトには下移動ボタンが無効", () => {
+            useBoardStore.getState().setProjects([proj("P1", "開発", 0), proj("P2", "個人", 1)]);
+            render(_jsx(Sidebar, {}));
+            const downBtn = screen.getByRole("button", { name: "個人を下へ" });
+            expect(downBtn).toBeDisabled();
+        });
+        it("下移動ボタンでreorderProjectsActionが呼ばれる", async () => {
+            const user = userEvent.setup();
+            useBoardStore.getState().setProjects([proj("P1", "開発", 0), proj("P2", "個人", 1)]);
+            render(_jsx(Sidebar, {}));
+            await user.click(screen.getByRole("button", { name: "開発を下へ" }));
+            expect(reorderProjectsAction).toHaveBeenCalledWith(expect.anything(), ["P2", "P1"]);
+        });
+        it("上移動ボタンでreorderProjectsActionが呼ばれる", async () => {
+            const user = userEvent.setup();
+            useBoardStore.getState().setProjects([proj("P1", "開発", 0), proj("P2", "個人", 1)]);
+            render(_jsx(Sidebar, {}));
+            await user.click(screen.getByRole("button", { name: "個人を上へ" }));
+            expect(reorderProjectsAction).toHaveBeenCalledWith(expect.anything(), ["P2", "P1"]);
+        });
+        it("プロジェクトが1件のときは上下ボタンが両方無効", () => {
+            useBoardStore.getState().setProjects([proj("P1", "開発", 0)]);
+            render(_jsx(Sidebar, {}));
+            expect(screen.getByRole("button", { name: "開発を上へ" })).toBeDisabled();
+            expect(screen.getByRole("button", { name: "開発を下へ" })).toBeDisabled();
+        });
     });
 });

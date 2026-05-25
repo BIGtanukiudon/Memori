@@ -3,6 +3,7 @@ import type { Priority } from "@/lib/priority";
 export interface Project {
   id: string;
   name: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 }

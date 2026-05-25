@@ -31,6 +31,7 @@ export const useBoardStore = create((set) => ({
         projects: s.projects.filter((p) => p.id !== id),
         currentProjectId: s.currentProjectId === id ? null : s.currentProjectId,
     })),
+    reorderProjects: (orderedIds) => set((s) => ({ projects: renumberByOrder(s.projects, orderedIds) })),
     upsertColumn: (c) => set((s) => ({ columns: upsertById(s.columns, c) })),
     removeColumn: (id) => set((s) => ({
         columns: s.columns.filter((c) => c.id !== id),

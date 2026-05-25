@@ -6,8 +6,8 @@ import { QuickInputDialog } from "./QuickInputDialog";
 import type { Column, Project } from "@/types/domain";
 
 const projects: Project[] = [
-  { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
-  { id: "P2", name: "個人", createdAt: "", updatedAt: "" },
+  { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
+  { id: "P2", name: "個人", position: 1, createdAt: "", updatedAt: "" },
 ];
 
 const columnsByProject: Record<string, Column[]> = {

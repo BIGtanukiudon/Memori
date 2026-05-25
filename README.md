@@ -7,6 +7,7 @@ Windowsデスクトップ向けのカンバンタスク管理ツール。プロ�
 ## 主な機能
 
 - **カンバンボード**: プロジェクト単位の列（ステータス）管理とカードのドラッグ&ドロップ
+- **プロジェクト並び替え**: サイドバーの上下ボタンでプロジェクトの表示順を変更
 - **タスク詳細編集**: タイトル・メモ・期日・優先度をモーダルで編集
 - **クイック入力ウィンドウ**: `app.exe --quick` で呼び出せる軽量入力ウィンドウ（AHK等のホットキーから利用）
 - **全タスク一覧ビュー**: プロジェクト横断でフィルタ・ソート可能なリストビュー
@@ -52,7 +53,7 @@ SQLite上の主要テーブル（IDはすべてULID／TEXT）:
 
 | テーブル | 主なカラム | 補足 |
 |---|---|---|
-| `projects` | `id`, `name`, `created_at`, `updated_at` | プロジェクト（大項目） |
+| `projects` | `id`, `name`, `position`, `created_at`, `updated_at` | プロジェクト（大項目）。`position` で表示順を管理 |
 | `columns`  | `id`, `project_id`, `name`, `position` | カンバンの列（ステータス）。`project_id` に対し `ON DELETE CASCADE` |
 | `tasks`    | `id`, `project_id`, `column_id`, `title`, `memo`, `due_date`, `priority`, `position`, `created_at`, `updated_at` | `column_id` に対し `ON DELETE CASCADE`。`priority` は `0:なし / 1:低 / 2:中 / 3:高` |
 

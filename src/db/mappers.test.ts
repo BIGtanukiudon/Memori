@@ -8,12 +8,14 @@ describe("rowToProject", () => {
       rowToProject({
         id: "01PROJECT",
         name: "開発",
+        position: 0,
         created_at: "2026-05-12T10:00:00.000Z",
         updated_at: "2026-05-12T11:00:00.000Z",
       }),
     ).toEqual({
       id: "01PROJECT",
       name: "開発",
+      position: 0,
       createdAt: "2026-05-12T10:00:00.000Z",
       updatedAt: "2026-05-12T11:00:00.000Z",
     });

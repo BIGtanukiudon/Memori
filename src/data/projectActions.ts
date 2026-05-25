@@ -3,6 +3,7 @@ import {
   createProject,
   deleteProject,
   renameProject,
+  reorderProjects,
 } from "@/db/projects";
 import type { Project } from "@/types/domain";
 import { useBoardStore } from "@/store/boardStore";
@@ -47,6 +48,14 @@ export async function deleteProjectAction(db: Db, id: string): Promise<void> {
     const next = useBoardStore.getState().projects[0]?.id ?? null;
     useBoardStore.getState().setCurrentProject(next);
   }
+}
+
+export async function reorderProjectsAction(
+  db: Db,
+  orderedIds: readonly string[],
+): Promise<void> {
+  await reorderProjects(db, orderedIds);
+  useBoardStore.getState().reorderProjects(orderedIds);
 }
 
 export async function countTasksInProject(db: Db, projectId: string): Promise<number> {

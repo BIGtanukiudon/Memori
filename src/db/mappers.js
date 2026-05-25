@@ -3,6 +3,7 @@ export function rowToProject(r) {
     return {
         id: r.id,
         name: r.name,
+        position: r.position,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
     };

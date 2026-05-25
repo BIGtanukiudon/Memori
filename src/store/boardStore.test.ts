@@ -3,9 +3,10 @@ import { Priority } from "@/lib/priority";
 import { useBoardStore } from "./boardStore";
 import type { Column, Project, Task } from "@/types/domain";
 
-const makeProject = (id: string, name = id): Project => ({
+const makeProject = (id: string, name = id, position = 0): Project => ({
   id,
   name,
+  position,
   createdAt: "2026-05-12T10:00:00.000Z",
   updatedAt: "2026-05-12T10:00:00.000Z",
 });
@@ -75,6 +76,19 @@ describe("boardStore", () => {
       const state = useBoardStore.getState();
       expect(state.projects).toHaveLength(0);
       expect(state.currentProjectId).toBeNull();
+    });
+
+    it("reorderProjects: 与えた順でposition再採番", () => {
+      const s = useBoardStore.getState();
+      s.setProjects([
+        makeProject("P0", "A", 0),
+        makeProject("P1", "B", 1),
+        makeProject("P2", "C", 2),
+      ]);
+      s.reorderProjects(["P2", "P0", "P1"]);
+      const ps = [...useBoardStore.getState().projects].sort((a, b) => a.position - b.position);
+      expect(ps.map((p) => p.id)).toEqual(["P2", "P0", "P1"]);
+      expect(ps.map((p) => p.position)).toEqual([0, 1, 2]);
     });
   });
 

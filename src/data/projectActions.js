@@ -1,4 +1,4 @@
-import { createProject, deleteProject, renameProject, } from "@/db/projects";
+import { createProject, deleteProject, renameProject, reorderProjects, } from "@/db/projects";
 import { useBoardStore } from "@/store/boardStore";
 export async function createProjectAction(db, name) {
     const project = await createProject(db, name);
@@ -35,6 +35,10 @@ export async function deleteProjectAction(db, id) {
         const next = useBoardStore.getState().projects[0]?.id ?? null;
         useBoardStore.getState().setCurrentProject(next);
     }
+}
+export async function reorderProjectsAction(db, orderedIds) {
+    await reorderProjects(db, orderedIds);
+    useBoardStore.getState().reorderProjects(orderedIds);
 }
 export async function countTasksInProject(db, projectId) {
     const rows = await db.select("SELECT COUNT(*) AS n FROM tasks WHERE project_id = ?", [projectId]);

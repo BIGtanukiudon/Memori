@@ -51,7 +51,7 @@ beforeEach(() => {
 describe("QuickApp", () => {
   it("プロジェクト一覧をロードしてダイアログを表示する", async () => {
     listProjects.mockResolvedValue([
-      { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
+      { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
     ]);
     listColumns.mockResolvedValue([
       { id: "C1", projectId: "P1", name: "Todo", position: 0 },
@@ -66,7 +66,7 @@ describe("QuickApp", () => {
   it("登録: createTaskAction → emitTaskCreated → hideQuickWindow の順で呼ばれる", async () => {
     const user = userEvent.setup();
     listProjects.mockResolvedValue([
-      { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
+      { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
     ]);
     listColumns.mockResolvedValue([
       { id: "C1", projectId: "P1", name: "Todo", position: 0 },
@@ -98,7 +98,7 @@ describe("QuickApp", () => {
   it("キャンセル: hideQuickWindow のみ呼ばれる", async () => {
     const user = userEvent.setup();
     listProjects.mockResolvedValue([
-      { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
+      { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
     ]);
     listColumns.mockResolvedValue([
       { id: "C1", projectId: "P1", name: "Todo", position: 0 },
@@ -114,7 +114,7 @@ describe("QuickApp", () => {
   it("登録後にフォーム状態がリセットされる", async () => {
     const user = userEvent.setup();
     listProjects.mockResolvedValue([
-      { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
+      { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
     ]);
     listColumns.mockResolvedValue([
       { id: "C1", projectId: "P1", name: "Todo", position: 0 },
@@ -140,7 +140,7 @@ describe("QuickApp", () => {
   it("キャンセル後にもフォーム状態がリセットされる", async () => {
     const user = userEvent.setup();
     listProjects.mockResolvedValue([
-      { id: "P1", name: "開発", createdAt: "", updatedAt: "" },
+      { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
     ]);
     listColumns.mockResolvedValue([
       { id: "C1", projectId: "P1", name: "Todo", position: 0 },

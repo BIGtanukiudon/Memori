@@ -4,6 +4,7 @@ import { parsePriority } from "@/lib/priority";
 export interface ProjectRow {
   id: string;
   name: string;
+  position: number;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +33,7 @@ export function rowToProject(r: ProjectRow): Project {
   return {
     id: r.id,
     name: r.name,
+    position: r.position,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

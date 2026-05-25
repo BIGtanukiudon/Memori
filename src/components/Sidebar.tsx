@@ -6,6 +6,7 @@ import {
   createProjectAction,
   deleteProjectAction,
   renameProjectAction,
+  reorderProjectsAction,
 } from "@/data/projectActions";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -90,6 +91,24 @@ export function Sidebar({ view = "board", onSelectView }: SidebarProps = {}) {
     setDeleteState(null);
   }
 
+  const sortedProjects = [...projects].sort((a, b) => a.position - b.position);
+
+  async function handleMoveUp(index: number) {
+    if (index <= 0) return;
+    const ids = sortedProjects.map((p) => p.id);
+    [ids[index - 1], ids[index]] = [ids[index]!, ids[index - 1]!];
+    const db = await getDb();
+    await reorderProjectsAction(db, ids);
+  }
+
+  async function handleMoveDown(index: number) {
+    if (index >= sortedProjects.length - 1) return;
+    const ids = sortedProjects.map((p) => p.id);
+    [ids[index], ids[index + 1]] = [ids[index + 1]!, ids[index]!];
+    const db = await getDb();
+    await reorderProjectsAction(db, ids);
+  }
+
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
       <nav className="flex flex-col border-b border-gray-200">
@@ -137,9 +156,11 @@ export function Sidebar({ view = "board", onSelectView }: SidebarProps = {}) {
         <div className="px-3 py-4 text-sm text-gray-500">プロジェクトがありません</div>
       ) : (
         <nav className="flex flex-col">
-          {projects.map((p) => {
+          {sortedProjects.map((p, idx) => {
             const active = p.id === currentProjectId;
             const isEditing = editingId === p.id;
+            const isFirst = idx === 0;
+            const isLast = idx === sortedProjects.length - 1;
             return (
               <div key={p.id} className="group flex items-center">
                 {isEditing ? (
@@ -160,7 +181,7 @@ export function Sidebar({ view = "board", onSelectView }: SidebarProps = {}) {
                         setCurrentProject(p.id);
                         onSelectView?.("board");
                       }}
-                      className={`flex-1 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                      className={`flex-1 truncate px-3 py-2 text-left text-sm hover:bg-gray-100 ${
                         active && view === "board"
                           ? "bg-gray-100 font-medium text-gray-900"
                           : "text-gray-700"
@@ -170,12 +191,30 @@ export function Sidebar({ view = "board", onSelectView }: SidebarProps = {}) {
                     </button>
                     <button
                       type="button"
+                      aria-label={`${p.name}を上へ`}
+                      disabled={isFirst}
+                      onClick={() => void handleMoveUp(idx)}
+                      className="px-0.5 text-xs text-gray-400 opacity-0 hover:text-gray-700 group-hover:opacity-100 disabled:opacity-30 disabled:hover:text-gray-400"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`${p.name}を下へ`}
+                      disabled={isLast}
+                      onClick={() => void handleMoveDown(idx)}
+                      className="px-0.5 text-xs text-gray-400 opacity-0 hover:text-gray-700 group-hover:opacity-100 disabled:opacity-30 disabled:hover:text-gray-400"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
                       aria-label={`${p.name}を編集`}
                       onClick={() => {
                         setEditingId(p.id);
                         setEditingName(p.name);
                       }}
-                      className="px-1 text-xs text-gray-400 opacity-0 hover:text-gray-700 group-hover:opacity-100"
+                      className="px-0.5 text-xs text-gray-400 opacity-0 hover:text-gray-700 group-hover:opacity-100"
                     >
                       ✎
                     </button>
@@ -183,7 +222,7 @@ export function Sidebar({ view = "board", onSelectView }: SidebarProps = {}) {
                       type="button"
                       aria-label={`${p.name}を削除`}
                       onClick={() => void openDelete(p.id, p.name)}
-                      className="px-1 pr-2 text-xs text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                      className="px-0.5 pr-2 text-xs text-gray-400 opacity-0 hover:text-red-600 group-hover:opacity-100"
                     >
                       ✕
                     </button>

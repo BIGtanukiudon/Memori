@@ -8,12 +8,14 @@ const baseState = (): Pick<BoardState, "projects" | "currentProjectId" | "column
     {
       id: "P1",
       name: "開発",
+      position: 0,
       createdAt: "2026-05-10T10:00:00.000Z",
       updatedAt: "2026-05-10T10:00:00.000Z",
     },
     {
       id: "P2",
       name: "個人",
+      position: 1,
       createdAt: "2026-05-11T10:00:00.000Z",
       updatedAt: "2026-05-11T10:00:00.000Z",
     },

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createProject, deleteProject, listProjects, renameProject } from "./projects";
+import { createProject, deleteProject, listProjects, renameProject, reorderProjects } from "./projects";
 import { createMockDb } from "../../tests/helpers/mockDb";
 describe("createProject", () => {
     beforeEach(() => {
@@ -9,17 +9,26 @@ describe("createProject", () => {
     afterEach(() => vi.useRealTimers());
     it("ULIDと現在時刻を採番してINSERTし、作成したProjectを返す", async () => {
         const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ next: 0 }]);
         const p = await createProject(db, "開発");
         expect(p.id).toHaveLength(26);
         expect(p.name).toBe("開発");
+        expect(p.position).toBe(0);
         expect(p.createdAt).toBe(p.updatedAt);
         expect(db.execute).toHaveBeenCalledTimes(1);
         const [sql, params] = db.execute.mock.calls[0];
         expect(sql).toMatch(/INSERT INTO projects/i);
-        expect(params).toEqual([p.id, "開発", p.createdAt, p.updatedAt]);
+        expect(params).toEqual([p.id, "開発", 0, p.createdAt, p.updatedAt]);
+    });
+    it("既存プロジェクトがある場合、positionは次の値が設定される", async () => {
+        const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ next: 3 }]);
+        const p = await createProject(db, "新規");
+        expect(p.position).toBe(3);
     });
     it("名前の前後空白はトリムする", async () => {
         const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ next: 0 }]);
         const p = await createProject(db, "  test  ");
         expect(p.name).toBe("test");
     });
@@ -31,18 +40,20 @@ describe("createProject", () => {
     });
 });
 describe("listProjects", () => {
-    it("created_at昇順で全プロジェクトを返す", async () => {
+    it("position昇順で全プロジェクトを返す", async () => {
         const db = createMockDb();
         db.select.mockResolvedValue([
             {
                 id: "01A",
                 name: "プロジェクトA",
+                position: 0,
                 created_at: "2026-05-10T10:00:00.000Z",
                 updated_at: "2026-05-10T10:00:00.000Z",
             },
             {
                 id: "01B",
                 name: "プロジェクトB",
+                position: 1,
                 created_at: "2026-05-11T10:00:00.000Z",
                 updated_at: "2026-05-11T10:00:00.000Z",
             },
@@ -50,7 +61,8 @@ describe("listProjects", () => {
         const result = await listProjects(db);
         expect(result).toHaveLength(2);
         expect(result[0].name).toBe("プロジェクトA");
-        expect(db.select.mock.calls[0][0]).toMatch(/ORDER BY created_at/i);
+        expect(result[0].position).toBe(0);
+        expect(db.select.mock.calls[0][0]).toMatch(/ORDER BY position/i);
     });
 });
 describe("renameProject", () => {
@@ -72,6 +84,21 @@ describe("renameProject", () => {
     it("空文字はエラー", async () => {
         const db = createMockDb();
         await expect(renameProject(db, "01PROJECT", "")).rejects.toThrow();
+    });
+});
+describe("reorderProjects", () => {
+    it("与えたID順でpositionをUPDATEする", async () => {
+        const db = createMockDb();
+        await reorderProjects(db, ["P2", "P0", "P1"]);
+        expect(db.execute).toHaveBeenCalledTimes(3);
+        expect(db.execute).toHaveBeenCalledWith(expect.stringMatching(/UPDATE projects SET position/i), [0, "P2"]);
+        expect(db.execute).toHaveBeenCalledWith(expect.stringMatching(/UPDATE projects SET position/i), [1, "P0"]);
+        expect(db.execute).toHaveBeenCalledWith(expect.stringMatching(/UPDATE projects SET position/i), [2, "P1"]);
+    });
+    it("空配列の場合はDB操作しない", async () => {
+        const db = createMockDb();
+        await reorderProjects(db, []);
+        expect(db.execute).not.toHaveBeenCalled();
     });
 });
 describe("deleteProject", () => {

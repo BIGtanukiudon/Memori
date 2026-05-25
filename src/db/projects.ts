@@ -19,16 +19,20 @@ export async function createProject(db: Db, name: string): Promise<Project> {
   const trimmed = requireName(name);
   const id = newId();
   const ts = nowIso();
-  await db.execute(
-    "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-    [id, trimmed, ts, ts],
+  const rows = await db.select<{ next: number }[]>(
+    "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM projects",
   );
-  return { id, name: trimmed, createdAt: ts, updatedAt: ts };
+  const position = rows[0]?.next ?? 0;
+  await db.execute(
+    "INSERT INTO projects (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    [id, trimmed, position, ts, ts],
+  );
+  return { id, name: trimmed, position, createdAt: ts, updatedAt: ts };
 }
 
 export async function listProjects(db: Db): Promise<Project[]> {
   const rows = await db.select<ProjectRow[]>(
-    "SELECT id, name, created_at, updated_at FROM projects ORDER BY created_at ASC",
+    "SELECT id, name, position, created_at, updated_at FROM projects ORDER BY position ASC",
   );
   return rows.map(rowToProject);
 }
@@ -41,6 +45,12 @@ export async function renameProject(db: Db, id: string, name: string): Promise<v
     ts,
     id,
   ]);
+}
+
+export async function reorderProjects(db: Db, orderedIds: readonly string[]): Promise<void> {
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db.execute("UPDATE projects SET position = ? WHERE id = ?", [i, orderedIds[i]]);
+  }
 }
 
 export async function deleteProject(db: Db, id: string): Promise<void> {

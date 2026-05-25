@@ -39,6 +39,7 @@ vi.mock("@/data/taskActions", () => ({
 const project: Project = {
   id: "P",
   name: "開発",
+  position: 0,
   createdAt: "",
   updatedAt: "",
 };

@@ -11,7 +11,7 @@ describe("createTaskAction", () => {
         const db = createMockDb();
         db.select.mockResolvedValueOnce([{ next: 0 }]);
         useBoardStore.setState({
-            projects: [{ id: "P1", name: "", createdAt: "", updatedAt: "" }],
+            projects: [{ id: "P1", name: "", position: 0, createdAt: "", updatedAt: "" }],
             columns: [{ id: "C1", projectId: "P1", name: "Todo", position: 0 }],
             tasks: [],
         });
