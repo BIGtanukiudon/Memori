@@ -30,11 +30,12 @@ export async function createTask(db, input) {
         dueDate,
         priority,
         position,
+        completedAt: null,
         createdAt: ts,
         updatedAt: ts,
     };
 }
-const TASK_SELECT_COLS = "id, project_id, column_id, title, memo, due_date, priority, position, created_at, updated_at";
+const TASK_SELECT_COLS = "id, project_id, column_id, title, memo, due_date, priority, position, completed_at, created_at, updated_at";
 export async function listTasks(db) {
     const rows = await db.select(`SELECT ${TASK_SELECT_COLS} FROM tasks ORDER BY column_id, position ASC`);
     return rows.map(rowToTask);
@@ -76,12 +77,17 @@ export async function updateTask(db, id, patch) {
     params.push(id);
     await db.execute(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`, params);
 }
-export async function updateTaskColumn(db, id, columnId) {
-    await db.execute("UPDATE tasks SET column_id = ?, updated_at = ? WHERE id = ?", [
-        columnId,
-        nowIso(),
-        id,
-    ]);
+export async function updateTaskColumn(db, id, columnId, completedAt) {
+    if (completedAt !== undefined) {
+        await db.execute("UPDATE tasks SET column_id = ?, completed_at = ?, updated_at = ? WHERE id = ?", [columnId, completedAt, nowIso(), id]);
+    }
+    else {
+        await db.execute("UPDATE tasks SET column_id = ?, updated_at = ? WHERE id = ?", [
+            columnId,
+            nowIso(),
+            id,
+        ]);
+    }
 }
 export async function reorderTasks(db, _columnId, orderedIds) {
     for (let i = 0; i < orderedIds.length; i++) {

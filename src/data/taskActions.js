@@ -40,7 +40,19 @@ export async function moveTaskAction(db, input) {
     const insertAt = Math.max(0, Math.min(input.toIndex, newDest.length));
     newDest.splice(insertAt, 0, task);
     const newDestIds = newDest.map((t) => t.id);
-    // 2) store更新
+    // 2) completedAt の判定
+    const project = store.projects.find((p) => p.id === task.projectId);
+    const doneColumnId = project?.doneColumnId ?? null;
+    let completedAt;
+    if (!sameColumn && doneColumnId) {
+        if (input.toColumnId === doneColumnId) {
+            completedAt = new Date().toISOString();
+        }
+        else if (fromColumnId === doneColumnId) {
+            completedAt = null;
+        }
+    }
+    // 3) store更新
     if (sameColumn) {
         store.reorderTasksInColumn(input.toColumnId, newDestIds);
     }
@@ -50,10 +62,15 @@ export async function moveTaskAction(db, input) {
             .sort((a, b) => a.position - b.position)
             .map((t) => t.id);
         store.moveTaskAcrossColumns(input.taskId, input.toColumnId, newSource, newDestIds);
+        if (completedAt !== undefined) {
+            useBoardStore.setState((s) => ({
+                tasks: s.tasks.map((t) => t.id === input.taskId ? { ...t, completedAt } : t),
+            }));
+        }
     }
-    // 3) DB永続化
+    // 4) DB永続化
     if (!sameColumn) {
-        await updateTaskColumn(db, input.taskId, input.toColumnId);
+        await updateTaskColumn(db, input.taskId, input.toColumnId, completedAt);
         const newSourceIds = useBoardStore
             .getState()
             .tasks.filter((t) => t.columnId === fromColumnId)

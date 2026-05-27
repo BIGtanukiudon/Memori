@@ -27,12 +27,12 @@ export async function createProject(db: Db, name: string): Promise<Project> {
     "INSERT INTO projects (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     [id, trimmed, position, ts, ts],
   );
-  return { id, name: trimmed, position, createdAt: ts, updatedAt: ts };
+  return { id, name: trimmed, position, doneColumnId: null, createdAt: ts, updatedAt: ts };
 }
 
 export async function listProjects(db: Db): Promise<Project[]> {
   const rows = await db.select<ProjectRow[]>(
-    "SELECT id, name, position, created_at, updated_at FROM projects ORDER BY position ASC",
+    "SELECT id, name, position, done_column_id, created_at, updated_at FROM projects ORDER BY position ASC",
   );
   return rows.map(rowToProject);
 }
@@ -51,6 +51,14 @@ export async function reorderProjects(db: Db, orderedIds: readonly string[]): Pr
   for (let i = 0; i < orderedIds.length; i++) {
     await db.execute("UPDATE projects SET position = ? WHERE id = ?", [i, orderedIds[i]]);
   }
+}
+
+export async function updateDoneColumn(
+  db: Db,
+  projectId: string,
+  columnId: string | null,
+): Promise<void> {
+  await db.execute("UPDATE projects SET done_column_id = ? WHERE id = ?", [columnId, projectId]);
 }
 
 export async function deleteProject(db: Db, id: string): Promise<void> {

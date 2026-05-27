@@ -6,8 +6,8 @@ import { AllTasksView } from "./AllTasksView";
 import type { Column, Project, Task } from "@/types/domain";
 
 const projects: Project[] = [
-  { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
-  { id: "P2", name: "個人", position: 1, createdAt: "", updatedAt: "" },
+  { id: "P1", name: "開発", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" },
+  { id: "P2", name: "個人", position: 1, doneColumnId: null, createdAt: "", updatedAt: "" },
 ];
 
 const columns: Column[] = [
@@ -25,6 +25,7 @@ const t = (overrides: Partial<Task>): Task => ({
   dueDate: null,
   priority: Priority.None,
   position: 0,
+  completedAt: null,
   createdAt: "2026-05-01T00:00:00.000Z",
   updatedAt: "2026-05-01T00:00:00.000Z",
   ...overrides,

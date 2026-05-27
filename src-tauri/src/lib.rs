@@ -44,6 +44,12 @@ pub fn run() {
             sql: include_str!("../migrations/002_project_position.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add done_column_id to projects and completed_at to tasks",
+            sql: include_str!("../migrations/003_done_column.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -32,6 +32,7 @@ describe("deleteColumnCascadeAction", () => {
     it("DELETE FROM columnsとstoreから列・配下タスクを除外", async () => {
         const db = createMockDb();
         useBoardStore.setState({
+            projects: [{ id: "P1", name: "P", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
             columns: [
                 { id: "C1", projectId: "P1", name: "Todo", position: 0 },
                 { id: "C2", projectId: "P1", name: "Done", position: 1 },
@@ -46,6 +47,7 @@ describe("deleteColumnCascadeAction", () => {
                     dueDate: null,
                     priority: 0,
                     position: 0,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },
@@ -58,6 +60,7 @@ describe("deleteColumnCascadeAction", () => {
                     dueDate: null,
                     priority: 0,
                     position: 0,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },
@@ -69,14 +72,28 @@ describe("deleteColumnCascadeAction", () => {
         expect(s.columns.map((c) => c.id)).toEqual(["C2"]);
         expect(s.tasks.map((t) => t.id)).toEqual(["T2"]);
     });
+    it("完了列を削除するとプロジェクトの doneColumnId がクリアされる", async () => {
+        const db = createMockDb();
+        useBoardStore.setState({
+            projects: [{ id: "P1", name: "P", position: 0, doneColumnId: "C1", createdAt: "", updatedAt: "" }],
+            columns: [
+                { id: "C1", projectId: "P1", name: "Done", position: 0 },
+                { id: "C2", projectId: "P1", name: "Todo", position: 1 },
+            ],
+            tasks: [],
+        });
+        await deleteColumnCascadeAction(db, "C1");
+        expect(db.execute).toHaveBeenCalledWith(expect.stringMatching(/UPDATE projects SET done_column_id/), [null, "P1"]);
+        expect(useBoardStore.getState().projects[0].doneColumnId).toBeNull();
+    });
 });
 describe("deleteColumnAfterMoveAction", () => {
     it("移動先列へタスクを移してから列を削除しstoreを更新", async () => {
         const db = createMockDb();
-        // moveTasksToColumn: 1) destの次position SELECT, 2) fromのtasks一覧 SELECT
         db.select.mockResolvedValueOnce([{ next: 0 }]);
         db.select.mockResolvedValueOnce([{ id: "T1" }]);
         useBoardStore.setState({
+            projects: [{ id: "P1", name: "P", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
             columns: [
                 { id: "C1", projectId: "P1", name: "From", position: 0 },
                 { id: "C2", projectId: "P1", name: "Dest", position: 1 },
@@ -91,16 +108,46 @@ describe("deleteColumnAfterMoveAction", () => {
                     dueDate: null,
                     priority: 0,
                     position: 0,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },
             ],
         });
         await deleteColumnAfterMoveAction(db, "C1", "C2");
-        // store: 列C1削除、T1のcolumnIdがC2に
         const s = useBoardStore.getState();
         expect(s.columns.map((c) => c.id)).toEqual(["C2"]);
         expect(s.tasks[0].columnId).toBe("C2");
+    });
+    it("完了列を削除するとプロジェクトの doneColumnId がクリアされる", async () => {
+        const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ next: 0 }]);
+        db.select.mockResolvedValueOnce([{ id: "T1" }]);
+        useBoardStore.setState({
+            projects: [{ id: "P1", name: "P", position: 0, doneColumnId: "C1", createdAt: "", updatedAt: "" }],
+            columns: [
+                { id: "C1", projectId: "P1", name: "Done", position: 0 },
+                { id: "C2", projectId: "P1", name: "Todo", position: 1 },
+            ],
+            tasks: [
+                {
+                    id: "T1",
+                    projectId: "P1",
+                    columnId: "C1",
+                    title: "x",
+                    memo: null,
+                    dueDate: null,
+                    priority: 0,
+                    position: 0,
+                    completedAt: null,
+                    createdAt: "",
+                    updatedAt: "",
+                },
+            ],
+        });
+        await deleteColumnAfterMoveAction(db, "C1", "C2");
+        expect(db.execute).toHaveBeenCalledWith(expect.stringMatching(/UPDATE projects SET done_column_id/), [null, "P1"]);
+        expect(useBoardStore.getState().projects[0].doneColumnId).toBeNull();
     });
 });
 describe("reorderColumnsAction", () => {
@@ -135,6 +182,7 @@ describe("countTasksInColumn", () => {
                     dueDate: null,
                     priority: 0,
                     position: 0,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },
@@ -147,6 +195,7 @@ describe("countTasksInColumn", () => {
                     dueDate: null,
                     priority: 0,
                     position: 1,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },
@@ -159,6 +208,7 @@ describe("countTasksInColumn", () => {
                     dueDate: null,
                     priority: 0,
                     position: 0,
+                    completedAt: null,
                     createdAt: "",
                     updatedAt: "",
                 },

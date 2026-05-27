@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { Priority } from "@/lib/priority";
 import { QuickInputDialog } from "./QuickInputDialog";
 const projects = [
-    { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
-    { id: "P2", name: "個人", position: 1, createdAt: "", updatedAt: "" },
+    { id: "P1", name: "開発", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" },
+    { id: "P2", name: "個人", position: 1, doneColumnId: null, createdAt: "", updatedAt: "" },
 ];
 const columnsByProject = {
     P1: [

@@ -14,6 +14,7 @@ const baseTask: Task = {
   dueDate: "2026-06-01",
   priority: Priority.Medium,
   position: 0,
+  completedAt: null,
   createdAt: "",
   updatedAt: "",
 };

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb } from "../../tests/helpers/mockDb";
 import { useBoardStore } from "@/store/boardStore";
 import { Priority } from "@/lib/priority";
@@ -10,15 +10,18 @@ import {
 } from "./taskActions";
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 4, 27, 12, 0, 0));
   useBoardStore.getState().reset();
 });
+afterEach(() => vi.useRealTimers());
 
 describe("createTaskAction", () => {
   it("DB INSERTとstoreへの追加を行う", async () => {
     const db = createMockDb();
     db.select.mockResolvedValueOnce([{ next: 0 }]);
     useBoardStore.setState({
-      projects: [{ id: "P1", name: "", position: 0, createdAt: "", updatedAt: "" }],
+      projects: [{ id: "P1", name: "", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
       columns: [{ id: "C1", projectId: "P1", name: "Todo", position: 0 }],
       tasks: [],
     });
@@ -46,6 +49,7 @@ describe("updateTaskAction", () => {
           dueDate: null,
           priority: Priority.None,
           position: 0,
+          completedAt: null,
           createdAt: "t0",
           updatedAt: "t0",
         },
@@ -84,6 +88,7 @@ describe("deleteTaskAction", () => {
           dueDate: null,
           priority: Priority.None,
           position: 0,
+          completedAt: null,
           createdAt: "",
           updatedAt: "",
         },
@@ -99,49 +104,29 @@ describe("deleteTaskAction", () => {
 });
 
 describe("moveTaskAction", () => {
+  const baseTask = (id: string, columnId: string, position: number) => ({
+    id,
+    projectId: "P1",
+    columnId,
+    title: id,
+    memo: null,
+    dueDate: null,
+    priority: Priority.None,
+    position,
+    completedAt: null as string | null,
+    createdAt: "",
+    updatedAt: "",
+  });
+
   const baseTasks = [
-    {
-      id: "T1",
-      projectId: "P1",
-      columnId: "C1",
-      title: "1",
-      memo: null,
-      dueDate: null,
-      priority: Priority.None,
-      position: 0,
-      createdAt: "",
-      updatedAt: "",
-    },
-    {
-      id: "T2",
-      projectId: "P1",
-      columnId: "C1",
-      title: "2",
-      memo: null,
-      dueDate: null,
-      priority: Priority.None,
-      position: 1,
-      createdAt: "",
-      updatedAt: "",
-    },
-    {
-      id: "T3",
-      projectId: "P1",
-      columnId: "C2",
-      title: "3",
-      memo: null,
-      dueDate: null,
-      priority: Priority.None,
-      position: 0,
-      createdAt: "",
-      updatedAt: "",
-    },
+    baseTask("T1", "C1", 0),
+    baseTask("T2", "C1", 1),
+    baseTask("T3", "C2", 0),
   ];
 
   it("同列内の並び替え", async () => {
     const db = createMockDb();
     useBoardStore.setState({ tasks: [...baseTasks] });
-    // T2 を C1 の先頭 (index 0) に移動
     await moveTaskAction(db, {
       taskId: "T2",
       toColumnId: "C1",
@@ -153,7 +138,6 @@ describe("moveTaskAction", () => {
       .sort((a, b) => a.position - b.position);
     expect(c1.map((t) => t.id)).toEqual(["T2", "T1"]);
     expect(c1.map((t) => t.position)).toEqual([0, 1]);
-    // reorderTasks の UPDATE が呼ばれる
     expect(db.execute).toHaveBeenCalledWith(
       expect.stringMatching(/UPDATE tasks SET position/),
       expect.any(Array),
@@ -163,7 +147,6 @@ describe("moveTaskAction", () => {
   it("列間の移動", async () => {
     const db = createMockDb();
     useBoardStore.setState({ tasks: [...baseTasks] });
-    // T1 を C2 の末尾(index=1)へ
     await moveTaskAction(db, {
       taskId: "T1",
       toColumnId: "C2",
@@ -180,10 +163,58 @@ describe("moveTaskAction", () => {
     expect(c1.map((t) => t.id)).toEqual(["T2"]);
     expect(c2.map((t) => t.id)).toEqual(["T3", "T1"]);
 
-    // updateTaskColumn と reorderTasks(両列) が呼ばれる
     expect(db.execute).toHaveBeenCalledWith(
       expect.stringMatching(/UPDATE tasks SET column_id/),
       expect.arrayContaining(["C2", "T1"]),
     );
+  });
+
+  it("完了列への移動で completedAt が記録される", async () => {
+    const db = createMockDb();
+    useBoardStore.setState({
+      projects: [{ id: "P1", name: "P", position: 0, doneColumnId: "C2", createdAt: "", updatedAt: "" }],
+      tasks: [...baseTasks],
+    });
+    await moveTaskAction(db, {
+      taskId: "T1",
+      toColumnId: "C2",
+      toIndex: 0,
+    });
+    const moved = useBoardStore.getState().tasks.find((t) => t.id === "T1")!;
+    expect(moved.completedAt).toBe(new Date().toISOString());
+  });
+
+  it("完了列から出ると completedAt がクリアされる", async () => {
+    const db = createMockDb();
+    const tasks = [
+      { ...baseTask("T1", "C2", 0), completedAt: "2026-05-20T00:00:00.000Z" },
+      baseTask("T2", "C1", 0),
+    ];
+    useBoardStore.setState({
+      projects: [{ id: "P1", name: "P", position: 0, doneColumnId: "C2", createdAt: "", updatedAt: "" }],
+      tasks,
+    });
+    await moveTaskAction(db, {
+      taskId: "T1",
+      toColumnId: "C1",
+      toIndex: 1,
+    });
+    const moved = useBoardStore.getState().tasks.find((t) => t.id === "T1")!;
+    expect(moved.completedAt).toBeNull();
+  });
+
+  it("完了列が未設定の場合は completedAt を変更しない", async () => {
+    const db = createMockDb();
+    useBoardStore.setState({
+      projects: [{ id: "P1", name: "P", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
+      tasks: [...baseTasks],
+    });
+    await moveTaskAction(db, {
+      taskId: "T1",
+      toColumnId: "C2",
+      toIndex: 0,
+    });
+    const moved = useBoardStore.getState().tasks.find((t) => t.id === "T1")!;
+    expect(moved.completedAt).toBeNull();
   });
 });

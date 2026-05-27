@@ -7,12 +7,31 @@ describe("rowToProject", () => {
             id: "01PROJECT",
             name: "開発",
             position: 0,
+            done_column_id: null,
             created_at: "2026-05-12T10:00:00.000Z",
             updated_at: "2026-05-12T11:00:00.000Z",
         })).toEqual({
             id: "01PROJECT",
             name: "開発",
             position: 0,
+            doneColumnId: null,
+            createdAt: "2026-05-12T10:00:00.000Z",
+            updatedAt: "2026-05-12T11:00:00.000Z",
+        });
+    });
+    it("done_column_idが設定されている場合にマッピングする", () => {
+        expect(rowToProject({
+            id: "01PROJECT",
+            name: "開発",
+            position: 0,
+            done_column_id: "01COL_DONE",
+            created_at: "2026-05-12T10:00:00.000Z",
+            updated_at: "2026-05-12T11:00:00.000Z",
+        })).toEqual({
+            id: "01PROJECT",
+            name: "開発",
+            position: 0,
+            doneColumnId: "01COL_DONE",
             createdAt: "2026-05-12T10:00:00.000Z",
             updatedAt: "2026-05-12T11:00:00.000Z",
         });
@@ -44,6 +63,7 @@ describe("rowToTask", () => {
             due_date: "2026-05-15",
             priority: 2,
             position: 3,
+            completed_at: null,
             created_at: "2026-05-12T10:00:00.000Z",
             updated_at: "2026-05-12T11:00:00.000Z",
         })).toEqual({
@@ -55,9 +75,26 @@ describe("rowToTask", () => {
             dueDate: "2026-05-15",
             priority: Priority.Medium,
             position: 3,
+            completedAt: null,
             createdAt: "2026-05-12T10:00:00.000Z",
             updatedAt: "2026-05-12T11:00:00.000Z",
         });
+    });
+    it("completedAtが設定されている場合にマッピングする", () => {
+        const t = rowToTask({
+            id: "01TASK",
+            project_id: "01PROJECT",
+            column_id: "01COL",
+            title: "完了タスク",
+            memo: null,
+            due_date: null,
+            priority: 0,
+            position: 0,
+            completed_at: "2026-05-12T12:00:00.000Z",
+            created_at: "2026-05-12T10:00:00.000Z",
+            updated_at: "2026-05-12T11:00:00.000Z",
+        });
+        expect(t.completedAt).toBe("2026-05-12T12:00:00.000Z");
     });
     it("memo/due_dateのnullを保持する", () => {
         const t = rowToTask({
@@ -69,11 +106,13 @@ describe("rowToTask", () => {
             due_date: null,
             priority: 0,
             position: 0,
+            completed_at: null,
             created_at: "2026-05-12T10:00:00.000Z",
             updated_at: "2026-05-12T10:00:00.000Z",
         });
         expect(t.memo).toBeNull();
         expect(t.dueDate).toBeNull();
+        expect(t.completedAt).toBeNull();
         expect(t.priority).toBe(Priority.None);
     });
     it("不正な優先度はNoneにフォールバック", () => {
@@ -86,6 +125,7 @@ describe("rowToTask", () => {
             due_date: null,
             priority: 99,
             position: 0,
+            completed_at: null,
             created_at: "2026-05-12T10:00:00.000Z",
             updated_at: "2026-05-12T10:00:00.000Z",
         });

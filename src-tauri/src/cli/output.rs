@@ -11,6 +11,7 @@ pub struct TaskListRow {
     pub column_name: String,
     pub priority: u8,
     pub due_date: Option<String>,
+    pub completed_at: Option<String>,
     pub title: String,
 }
 
@@ -116,8 +117,9 @@ pub fn format_list(rows: &[TaskListRow]) -> String {
         id: "ID".into(),
         project_name: "PROJECT".into(),
         column_name: "STATUS".into(),
-        priority: u8::MAX, // sentinel - 表示時は "PRIO"
+        priority: u8::MAX,
         due_date: Some("DUE".into()),
+        completed_at: Some("DONE".into()),
         title: "TITLE".into(),
     };
 
@@ -127,6 +129,7 @@ pub fn format_list(rows: &[TaskListRow]) -> String {
     let mut w_col = "STATUS".len();
     let mut w_prio = "PRIO".len();
     let mut w_due = "DUE".len();
+    let mut w_done = "DONE".len();
     for r in rows {
         w_id = w_id.max(display_width(&r.id));
         w_prj = w_prj.max(display_width(&r.project_name));
@@ -134,6 +137,8 @@ pub fn format_list(rows: &[TaskListRow]) -> String {
         w_prio = w_prio.max(display_width(priority_label(r.priority)));
         let d = r.due_date.as_deref().unwrap_or("-");
         w_due = w_due.max(display_width(d));
+        let done = r.completed_at.as_deref().unwrap_or("-");
+        w_done = w_done.max(display_width(done));
     }
 
     let mut out = String::new();
@@ -143,28 +148,33 @@ pub fn format_list(rows: &[TaskListRow]) -> String {
         &header.column_name,
         "PRIO",
         header.due_date.as_deref().unwrap_or("-"),
+        header.completed_at.as_deref().unwrap_or("-"),
         &header.title,
         w_id,
         w_prj,
         w_col,
         w_prio,
         w_due,
+        w_done,
     ));
     out.push('\n');
     for r in rows {
         let d = r.due_date.as_deref().unwrap_or("-");
+        let done = r.completed_at.as_deref().unwrap_or("-");
         out.push_str(&format_row(
             &r.id,
             &r.project_name,
             &r.column_name,
             priority_label(r.priority),
             d,
+            done,
             &r.title,
             w_id,
             w_prj,
             w_col,
             w_prio,
             w_due,
+            w_done,
         ));
         out.push('\n');
     }
@@ -179,20 +189,23 @@ fn format_row(
     col: &str,
     prio: &str,
     due: &str,
+    done: &str,
     title: &str,
     w_id: usize,
     w_prj: usize,
     w_col: usize,
     w_prio: usize,
     w_due: usize,
+    w_done: usize,
 ) -> String {
     format!(
-        "{id}{p1}  {prj}{p2}  {col}{p3}  {prio}{p4}  {due}{p5}  {title}",
+        "{id}{p1}  {prj}{p2}  {col}{p3}  {prio}{p4}  {due}{p5}  {done}{p6}  {title}",
         p1 = pad(id, w_id),
         p2 = pad(prj, w_prj),
         p3 = pad(col, w_col),
         p4 = pad(prio, w_prio),
         p5 = pad(due, w_due),
+        p6 = pad(done, w_done),
     )
 }
 
@@ -317,6 +330,7 @@ mod tests {
                 column_name: "Todo".into(),
                 priority: 2,
                 due_date: Some("2026-05-30".into()),
+                completed_at: None,
                 title: "first".into(),
             },
             TaskListRow {
@@ -325,6 +339,7 @@ mod tests {
                 column_name: "Done".into(),
                 priority: 0,
                 due_date: None,
+                completed_at: Some("2026-05-28T12:00:00.000Z".into()),
                 title: "second".into(),
             },
         ];
@@ -334,12 +349,13 @@ mod tests {
         assert!(out.contains("STATUS"));
         assert!(out.contains("PRIO"));
         assert!(out.contains("DUE"));
+        assert!(out.contains("DONE"));
         assert!(out.contains("TITLE"));
         assert!(out.contains("01HX"));
         assert!(out.contains("01HY"));
         assert!(out.contains("first"));
         assert!(out.contains("second"));
-        assert!(out.contains("-")); // due_date None
+        assert!(out.contains("2026-05-28T12:00:00.000Z"));
         assert!(out.contains("中"));
         assert!(out.contains("なし"));
     }

@@ -4,6 +4,7 @@ export interface Project {
   id: string;
   name: string;
   position: number;
+  doneColumnId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +25,7 @@ export interface Task {
   dueDate: string | null;
   priority: Priority;
   position: number;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

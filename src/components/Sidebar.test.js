@@ -24,6 +24,7 @@ const proj = (id, name, position = 0) => ({
     id,
     name,
     position,
+    doneColumnId: null,
     createdAt: "",
     updatedAt: "",
 });
@@ -82,7 +83,7 @@ describe("Sidebar", () => {
     });
     it("「新規プロジェクト」ボタンで入力欄を表示しEnterで作成", async () => {
         const user = userEvent.setup();
-        createProjectAction.mockResolvedValue({ id: "P9", name: "新", position: 0, createdAt: "", updatedAt: "" });
+        createProjectAction.mockResolvedValue({ id: "P9", name: "新", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" });
         render(_jsx(Sidebar, {}));
         await user.click(screen.getByRole("button", { name: "新規プロジェクト" }));
         const input = screen.getByPlaceholderText("プロジェクト名");

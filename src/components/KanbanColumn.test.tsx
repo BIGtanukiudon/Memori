@@ -16,6 +16,7 @@ const task = (id: string, title: string): Task => ({
   dueDate: null,
   priority: Priority.None,
   position: 0,
+  completedAt: null,
   createdAt: "",
   updatedAt: "",
 });
@@ -61,6 +62,25 @@ describe("KanbanColumn", () => {
     render(<KanbanColumn column={column} tasks={[]} onRequestDelete={onRequestDelete} />);
     await userEvent.click(screen.getByRole("button", { name: "Todoを削除" }));
     expect(onRequestDelete).toHaveBeenCalledWith(column);
+  });
+
+  it("「完了列に設定」ボタンで onSetDoneColumn が呼ばれる", async () => {
+    const onSetDoneColumn = vi.fn();
+    render(<KanbanColumn column={column} tasks={[]} isDoneColumn={false} onSetDoneColumn={onSetDoneColumn} />);
+    await userEvent.click(screen.getByRole("button", { name: "Todoを完了列に設定" }));
+    expect(onSetDoneColumn).toHaveBeenCalledWith("C0");
+  });
+
+  it("完了列の場合は「完了列を解除」ボタンが表示される", async () => {
+    const onSetDoneColumn = vi.fn();
+    render(<KanbanColumn column={column} tasks={[]} isDoneColumn={true} onSetDoneColumn={onSetDoneColumn} />);
+    await userEvent.click(screen.getByRole("button", { name: "Todoの完了列を解除" }));
+    expect(onSetDoneColumn).toHaveBeenCalledWith(null);
+  });
+
+  it("onSetDoneColumn が未指定の場合はボタンが表示されない", () => {
+    render(<KanbanColumn column={column} tasks={[]} />);
+    expect(screen.queryByRole("button", { name: /完了列/ })).not.toBeInTheDocument();
   });
 
   it("「タスク追加」でインライン入力→Enterで onAddTask が呼ばれる", async () => {

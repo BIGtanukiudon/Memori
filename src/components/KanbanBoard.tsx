@@ -33,6 +33,7 @@ import {
   moveTaskAction,
   updateTaskAction,
 } from "@/data/taskActions";
+import { setDoneColumnAction } from "@/data/projectActions";
 import { computeColumnReorder, computeTaskMove } from "@/lib/dnd";
 import type { Column } from "@/types/domain";
 import { KanbanColumn } from "./KanbanColumn";
@@ -144,6 +145,12 @@ export function KanbanBoard() {
     setEditingTaskId(null);
   }
 
+  async function handleSetDoneColumn(columnId: string | null) {
+    if (!currentProject) return;
+    const db = await getDb();
+    await setDoneColumnAction(db, currentProject.id, columnId);
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const activeId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
@@ -192,6 +199,8 @@ export function KanbanBoard() {
               onRequestDelete={(col) => void handleRequestDelete(col)}
               onAddTask={(columnId, title) => void handleAddTask(columnId, title)}
               onTaskClick={(t) => setEditingTaskId(t.id)}
+              isDoneColumn={currentProject?.doneColumnId === c.id}
+              onSetDoneColumn={(id) => void handleSetDoneColumn(id)}
               draggable
             />
           ))}

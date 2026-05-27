@@ -12,6 +12,7 @@ const baseTask = (over = {}) => ({
     dueDate: null,
     priority: Priority.None,
     position: 0,
+    completedAt: null,
     createdAt: "",
     updatedAt: "",
     ...over,

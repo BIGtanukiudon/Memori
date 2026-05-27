@@ -40,7 +40,11 @@ pub fn open_db(path: &Path) -> Result<Connection, String> {
 /// 本番 (`open_db`) では tauri-plugin-sql のマイグレーション後を想定するので呼ばない。
 pub fn init_schema_for_test(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(include_str!("../../migrations/001_init.sql"))
-        .map_err(|e| format!("スキーマ初期化失敗: {e}"))
+        .map_err(|e| format!("スキーマ初期化失敗: {e}"))?;
+    conn.execute_batch(include_str!("../../migrations/002_project_position.sql"))
+        .map_err(|e| format!("マイグレーション002失敗: {e}"))?;
+    conn.execute_batch(include_str!("../../migrations/003_done_column.sql"))
+        .map_err(|e| format!("マイグレーション003失敗: {e}"))
 }
 
 fn now_iso() -> String {
@@ -133,7 +137,7 @@ pub struct ListFilter<'a> {
 
 pub fn list_tasks(conn: &Connection, filter: ListFilter<'_>) -> Result<Vec<TaskListRow>, String> {
     let mut sql = String::from(
-        "SELECT t.id, p.name, c.name, t.priority, t.due_date, t.title \
+        "SELECT t.id, p.name, c.name, t.priority, t.due_date, t.completed_at, t.title \
          FROM tasks t \
          JOIN projects p ON p.id = t.project_id \
          JOIN columns c ON c.id = t.column_id",
@@ -163,7 +167,8 @@ pub fn list_tasks(conn: &Connection, filter: ListFilter<'_>) -> Result<Vec<TaskL
                 column_name: r.get(2)?,
                 priority: r.get::<_, i64>(3)? as u8,
                 due_date: r.get::<_, Option<String>>(4)?,
-                title: r.get(5)?,
+                completed_at: r.get::<_, Option<String>>(5)?,
+                title: r.get(6)?,
             })
         })
         .map_err(|e| format!("list実行失敗: {e}"))?;

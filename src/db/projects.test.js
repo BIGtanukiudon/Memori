@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createProject, deleteProject, listProjects, renameProject, reorderProjects } from "./projects";
+import { createProject, deleteProject, listProjects, renameProject, reorderProjects, updateDoneColumn } from "./projects";
 import { createMockDb } from "../../tests/helpers/mockDb";
 describe("createProject", () => {
     beforeEach(() => {
@@ -14,6 +14,7 @@ describe("createProject", () => {
         expect(p.id).toHaveLength(26);
         expect(p.name).toBe("開発");
         expect(p.position).toBe(0);
+        expect(p.doneColumnId).toBeNull();
         expect(p.createdAt).toBe(p.updatedAt);
         expect(db.execute).toHaveBeenCalledTimes(1);
         const [sql, params] = db.execute.mock.calls[0];
@@ -47,6 +48,7 @@ describe("listProjects", () => {
                 id: "01A",
                 name: "プロジェクトA",
                 position: 0,
+                done_column_id: null,
                 created_at: "2026-05-10T10:00:00.000Z",
                 updated_at: "2026-05-10T10:00:00.000Z",
             },
@@ -54,6 +56,7 @@ describe("listProjects", () => {
                 id: "01B",
                 name: "プロジェクトB",
                 position: 1,
+                done_column_id: "C_DONE",
                 created_at: "2026-05-11T10:00:00.000Z",
                 updated_at: "2026-05-11T10:00:00.000Z",
             },
@@ -61,7 +64,8 @@ describe("listProjects", () => {
         const result = await listProjects(db);
         expect(result).toHaveLength(2);
         expect(result[0].name).toBe("プロジェクトA");
-        expect(result[0].position).toBe(0);
+        expect(result[0].doneColumnId).toBeNull();
+        expect(result[1].doneColumnId).toBe("C_DONE");
         expect(db.select.mock.calls[0][0]).toMatch(/ORDER BY position/i);
     });
 });
@@ -99,6 +103,22 @@ describe("reorderProjects", () => {
         const db = createMockDb();
         await reorderProjects(db, []);
         expect(db.execute).not.toHaveBeenCalled();
+    });
+});
+describe("updateDoneColumn", () => {
+    it("done_column_idを設定する", async () => {
+        const db = createMockDb();
+        await updateDoneColumn(db, "01PROJECT", "01COL_DONE");
+        const [sql, params] = db.execute.mock.calls[0];
+        expect(sql).toMatch(/UPDATE projects SET done_column_id = /i);
+        expect(params).toEqual(["01COL_DONE", "01PROJECT"]);
+    });
+    it("done_column_idをnullにクリアする", async () => {
+        const db = createMockDb();
+        await updateDoneColumn(db, "01PROJECT", null);
+        const [sql, params] = db.execute.mock.calls[0];
+        expect(sql).toMatch(/UPDATE projects SET done_column_id = /i);
+        expect(params).toEqual([null, "01PROJECT"]);
     });
 });
 describe("deleteProject", () => {

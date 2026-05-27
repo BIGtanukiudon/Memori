@@ -52,13 +52,14 @@ export async function createTask(db: Db, input: CreateTaskInput): Promise<Task> 
     dueDate,
     priority,
     position,
+    completedAt: null,
     createdAt: ts,
     updatedAt: ts,
   };
 }
 
 const TASK_SELECT_COLS =
-  "id, project_id, column_id, title, memo, due_date, priority, position, created_at, updated_at";
+  "id, project_id, column_id, title, memo, due_date, priority, position, completed_at, created_at, updated_at";
 
 export async function listTasks(db: Db): Promise<Task[]> {
   const rows = await db.select<TaskRow[]>(
@@ -122,12 +123,24 @@ export async function updateTask(db: Db, id: string, patch: UpdateTaskPatch): Pr
   await db.execute(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`, params);
 }
 
-export async function updateTaskColumn(db: Db, id: string, columnId: string): Promise<void> {
-  await db.execute("UPDATE tasks SET column_id = ?, updated_at = ? WHERE id = ?", [
-    columnId,
-    nowIso(),
-    id,
-  ]);
+export async function updateTaskColumn(
+  db: Db,
+  id: string,
+  columnId: string,
+  completedAt?: string | null,
+): Promise<void> {
+  if (completedAt !== undefined) {
+    await db.execute(
+      "UPDATE tasks SET column_id = ?, completed_at = ?, updated_at = ? WHERE id = ?",
+      [columnId, completedAt, nowIso(), id],
+    );
+  } else {
+    await db.execute("UPDATE tasks SET column_id = ?, updated_at = ? WHERE id = ?", [
+      columnId,
+      nowIso(),
+      id,
+    ]);
+  }
 }
 
 export async function reorderTasks(

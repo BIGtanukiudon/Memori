@@ -5,6 +5,7 @@ export interface ProjectRow {
   id: string;
   name: string;
   position: number;
+  done_column_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +26,7 @@ export interface TaskRow {
   due_date: string | null;
   priority: number;
   position: number;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,7 @@ export function rowToProject(r: ProjectRow): Project {
     id: r.id,
     name: r.name,
     position: r.position,
+    doneColumnId: r.done_column_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -58,6 +61,7 @@ export function rowToTask(r: TaskRow): Task {
     dueDate: r.due_date,
     priority: parsePriority(r.priority),
     position: r.position,
+    completedAt: r.completed_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

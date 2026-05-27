@@ -10,6 +10,7 @@ const t = (overrides) => ({
     dueDate: null,
     priority: Priority.None,
     position: 0,
+    completedAt: null,
     createdAt: "2026-05-01T00:00:00.000Z",
     updatedAt: "2026-05-01T00:00:00.000Z",
     ...overrides,

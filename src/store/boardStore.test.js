@@ -5,6 +5,7 @@ const makeProject = (id, name = id, position = 0) => ({
     id,
     name,
     position,
+    doneColumnId: null,
     createdAt: "2026-05-12T10:00:00.000Z",
     updatedAt: "2026-05-12T10:00:00.000Z",
 });
@@ -23,6 +24,7 @@ const makeTask = (id, columnId, position, projectId = "P") => ({
     dueDate: null,
     priority: Priority.None,
     position,
+    completedAt: null,
     createdAt: "2026-05-12T10:00:00.000Z",
     updatedAt: "2026-05-12T10:00:00.000Z",
 });

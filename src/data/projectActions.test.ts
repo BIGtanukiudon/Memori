@@ -7,6 +7,7 @@ import {
   deleteProjectAction,
   countTasksInProject,
   reorderProjectsAction,
+  setDoneColumnAction,
 } from "./projectActions";
 
 beforeEach(() => {
@@ -35,7 +36,7 @@ describe("createProjectAction", () => {
   it("既にcurrentが選択されていれば変更しない", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P0", name: "既存", position: 0, createdAt: "", updatedAt: "" }],
+      projects: [{ id: "P0", name: "既存", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
       currentProjectId: "P0",
     });
     const p = await createProjectAction(db, "別");
@@ -48,7 +49,7 @@ describe("renameProjectAction", () => {
   it("DB UPDATEとstore反映を行う", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P1", name: "旧", position: 0, createdAt: "t0", updatedAt: "t0" }],
+      projects: [{ id: "P1", name: "旧", position: 0, doneColumnId: null, createdAt: "t0", updatedAt: "t0" }],
     });
     await renameProjectAction(db, "P1", " 新 ");
 
@@ -67,8 +68,8 @@ describe("deleteProjectAction", () => {
     const db = createMockDb();
     useBoardStore.setState({
       projects: [
-        { id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" },
-        { id: "P2", name: "B", position: 1, createdAt: "", updatedAt: "" },
+        { id: "P1", name: "A", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" },
+        { id: "P2", name: "B", position: 1, doneColumnId: null, createdAt: "", updatedAt: "" },
       ],
       currentProjectId: "P1",
       columns: [{ id: "C1", projectId: "P1", name: "Todo", position: 0 }],
@@ -90,7 +91,7 @@ describe("deleteProjectAction", () => {
   it("削除後にプロジェクトが0件ならcurrentはnull", async () => {
     const db = createMockDb();
     useBoardStore.setState({
-      projects: [{ id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" }],
+      projects: [{ id: "P1", name: "A", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
       currentProjectId: "P1",
     });
     await deleteProjectAction(db, "P1");
@@ -103,9 +104,9 @@ describe("reorderProjectsAction", () => {
     const db = createMockDb();
     useBoardStore.setState({
       projects: [
-        { id: "P1", name: "A", position: 0, createdAt: "", updatedAt: "" },
-        { id: "P2", name: "B", position: 1, createdAt: "", updatedAt: "" },
-        { id: "P3", name: "C", position: 2, createdAt: "", updatedAt: "" },
+        { id: "P1", name: "A", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" },
+        { id: "P2", name: "B", position: 1, doneColumnId: null, createdAt: "", updatedAt: "" },
+        { id: "P3", name: "C", position: 2, doneColumnId: null, createdAt: "", updatedAt: "" },
       ],
     });
 
@@ -114,6 +115,36 @@ describe("reorderProjectsAction", () => {
     expect(db.execute).toHaveBeenCalledTimes(3);
     const ps = [...useBoardStore.getState().projects].sort((a, b) => a.position - b.position);
     expect(ps.map((p) => p.id)).toEqual(["P3", "P1", "P2"]);
+  });
+});
+
+describe("setDoneColumnAction", () => {
+  it("DBに完了列IDを設定し、storeのprojectを更新する", async () => {
+    const db = createMockDb();
+    useBoardStore.setState({
+      projects: [{ id: "P1", name: "A", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" }],
+    });
+    await setDoneColumnAction(db, "P1", "C_DONE");
+
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE projects SET done_column_id/),
+      ["C_DONE", "P1"],
+    );
+    expect(useBoardStore.getState().projects[0]!.doneColumnId).toBe("C_DONE");
+  });
+
+  it("nullを渡すと完了列をクリアする", async () => {
+    const db = createMockDb();
+    useBoardStore.setState({
+      projects: [{ id: "P1", name: "A", position: 0, doneColumnId: "C_DONE", createdAt: "", updatedAt: "" }],
+    });
+    await setDoneColumnAction(db, "P1", null);
+
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE projects SET done_column_id/),
+      [null, "P1"],
+    );
+    expect(useBoardStore.getState().projects[0]!.doneColumnId).toBeNull();
   });
 });
 

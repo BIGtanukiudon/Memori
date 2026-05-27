@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { Priority } from "@/lib/priority";
 import { AllTasksView } from "./AllTasksView";
 const projects = [
-    { id: "P1", name: "開発", position: 0, createdAt: "", updatedAt: "" },
-    { id: "P2", name: "個人", position: 1, createdAt: "", updatedAt: "" },
+    { id: "P1", name: "開発", position: 0, doneColumnId: null, createdAt: "", updatedAt: "" },
+    { id: "P2", name: "個人", position: 1, doneColumnId: null, createdAt: "", updatedAt: "" },
 ];
 const columns = [
     { id: "C1", projectId: "P1", name: "Todo", position: 0 },
@@ -22,6 +22,7 @@ const t = (overrides) => ({
     dueDate: null,
     priority: Priority.None,
     position: 0,
+    completedAt: null,
     createdAt: "2026-05-01T00:00:00.000Z",
     updatedAt: "2026-05-01T00:00:00.000Z",
     ...overrides,

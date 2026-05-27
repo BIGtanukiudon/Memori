@@ -4,6 +4,7 @@ import {
   deleteProject,
   renameProject,
   reorderProjects,
+  updateDoneColumn,
 } from "@/db/projects";
 import type { Project } from "@/types/domain";
 import { useBoardStore } from "@/store/boardStore";
@@ -56,6 +57,18 @@ export async function reorderProjectsAction(
 ): Promise<void> {
   await reorderProjects(db, orderedIds);
   useBoardStore.getState().reorderProjects(orderedIds);
+}
+
+export async function setDoneColumnAction(
+  db: Db,
+  projectId: string,
+  columnId: string | null,
+): Promise<void> {
+  await updateDoneColumn(db, projectId, columnId);
+  const store = useBoardStore.getState();
+  const target = store.projects.find((p) => p.id === projectId);
+  if (!target) return;
+  store.upsertProject({ ...target, doneColumnId: columnId });
 }
 
 export async function countTasksInProject(db: Db, projectId: string): Promise<number> {

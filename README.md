@@ -7,6 +7,7 @@ Windowsデスクトップ向けのカンバンタスク管理ツール。プロ�
 ## 主な機能
 
 - **カンバンボード**: プロジェクト単位の列（ステータス）管理とカードのドラッグ&ドロップ
+- **完了列**: 任意のカラムを「完了列」に指定可能。タスクが完了列に移動すると完了日時を自動記録
 - **プロジェクト並び替え**: サイドバーの上下ボタンでプロジェクトの表示順を変更
 - **タスク詳細編集**: タイトル・メモ・期日・優先度をモーダルで編集
 - **クイック入力ウィンドウ**: `app.exe --quick` で呼び出せる軽量入力ウィンドウ（AHK等のホットキーから利用）
@@ -53,11 +54,11 @@ SQLite上の主要テーブル（IDはすべてULID／TEXT）:
 
 | テーブル | 主なカラム | 補足 |
 |---|---|---|
-| `projects` | `id`, `name`, `position`, `created_at`, `updated_at` | プロジェクト（大項目）。`position` で表示順を管理 |
+| `projects` | `id`, `name`, `position`, `done_column_id`, `created_at`, `updated_at` | プロジェクト（大項目）。`position` で表示順を管理。`done_column_id` は完了列（nullable、最大1つ） |
 | `columns`  | `id`, `project_id`, `name`, `position` | カンバンの列（ステータス）。`project_id` に対し `ON DELETE CASCADE` |
-| `tasks`    | `id`, `project_id`, `column_id`, `title`, `memo`, `due_date`, `priority`, `position`, `created_at`, `updated_at` | `column_id` に対し `ON DELETE CASCADE`。`priority` は `0:なし / 1:低 / 2:中 / 3:高` |
+| `tasks`    | `id`, `project_id`, `column_id`, `title`, `memo`, `due_date`, `priority`, `position`, `completed_at`, `created_at`, `updated_at` | `column_id` に対し `ON DELETE CASCADE`。`priority` は `0:なし / 1:低 / 2:中 / 3:高`。`completed_at` は完了列移動時に自動記録 |
 
-DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_init.sql)。並び順は同列内 `position` を 0始まりで再採番するシンプル方式。
+DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_init.sql)。完了列関連は [`003_done_column.sql`](./src-tauri/migrations/003_done_column.sql)。並び順は同列内 `position` を 0始まりで再採番するシンプル方式。
 
 ## ウィンドウ構成
 
@@ -83,6 +84,15 @@ DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_in
 | `project:changed` | `{ project_id }` | 列構成・プロジェクト一覧の再フェッチ |
 
 **CLI / 外部からのDB直接更新**はウィンドウ間イベントを発火しないため、メインウィンドウのフォーカス復帰時に再フェッチして同期します。
+
+## 完了列
+
+プロジェクトごとに1つのカラムを「完了列」として指定できます。
+
+- **設定/解除**: カラムヘッダーの ○ ボタンで完了列に設定。設定済みの列は ✓ ボタンで解除
+- **completedAt 自動記録**: タスクを完了列にドラッグ&ドロップすると `completed_at` に現在時刻が記録される。完了列から別の列に戻すと `completed_at` は `null` にリセット
+- **完了列の削除**: 完了列として指定中のカラムを削除すると、プロジェクトの `done_column_id` は自動的に `null` に戻る
+- **カード見た目**: 完了タスクのカード外見は通常タスクと同じ（視覚的区別なし）
 
 ## セットアップ
 
@@ -169,6 +179,7 @@ app.exe task add --title "認証バグ修正" --project "開発" --status "Todo"
                  --priority high --due 2026-05-30
 
 # タスク一覧（--project / --status で絞り込み可、いずれも省略可）
+# 出力列: ID, PROJECT, STATUS, PRIO, DUE, DONE(完了日時), TITLE
 app.exe task list --project "開発"
 app.exe task list --status "Todo"
 
@@ -243,7 +254,8 @@ app.exe project --help
 | 7 | シングルインスタンス制御 + AHK連携 | ✅ |
 | 8 | 全タスク一覧ビュー | ✅ |
 | 9 | CLIサブコマンド (`app.exe task ...` / `app.exe project ...`) | ✅ |
-| 10 | MCPサーバー実装 | 未着手 |
+| 10 | 完了列機能（カラムを完了列に指定、タスク移動時に `completedAt` 自動記録） | ✅ |
+| 11 | MCPサーバー実装 | 未着手 |
 
 ## ライセンス
 

@@ -12,6 +12,7 @@ const t = (id: string, columnId: string, position: number): Task => ({
   dueDate: null,
   priority: Priority.None,
   position,
+  completedAt: null,
   createdAt: "",
   updatedAt: "",
 });

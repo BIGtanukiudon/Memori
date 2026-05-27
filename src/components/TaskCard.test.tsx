@@ -13,6 +13,7 @@ const baseTask = (over: Partial<Task> = {}): Task => ({
   dueDate: null,
   priority: Priority.None,
   position: 0,
+  completedAt: null,
   createdAt: "",
   updatedAt: "",
   ...over,

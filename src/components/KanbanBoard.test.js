@@ -29,10 +29,14 @@ vi.mock("@/data/taskActions", () => ({
     deleteTaskAction: (...a) => deleteTaskAction(...a),
     moveTaskAction: (...a) => moveTaskAction(...a),
 }));
+vi.mock("@/data/projectActions", () => ({
+    setDoneColumnAction: vi.fn().mockResolvedValue(undefined),
+}));
 const project = {
     id: "P",
     name: "開発",
     position: 0,
+    doneColumnId: null,
     createdAt: "",
     updatedAt: "",
 };
@@ -51,6 +55,7 @@ const task = (id, columnId, position, title) => ({
     dueDate: null,
     priority: Priority.None,
     position,
+    completedAt: null,
     createdAt: "",
     updatedAt: "",
 });

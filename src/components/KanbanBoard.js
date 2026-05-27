@@ -7,6 +7,7 @@ import { selectCurrentProject, selectSortedColumns, selectTasksByColumn, } from 
 import { getDb } from "@/db/connection";
 import { countTasksInColumn, createColumnAction, deleteColumnCascadeAction, deleteColumnAfterMoveAction, renameColumnAction, reorderColumnsAction, } from "@/data/columnActions";
 import { createTaskAction, deleteTaskAction, moveTaskAction, updateTaskAction, } from "@/data/taskActions";
+import { setDoneColumnAction } from "@/data/projectActions";
 import { computeColumnReorder, computeTaskMove } from "@/lib/dnd";
 import { KanbanColumn } from "./KanbanColumn";
 import { DeleteColumnDialog } from "./DeleteColumnDialog";
@@ -98,6 +99,12 @@ export function KanbanBoard() {
         await deleteTaskAction(db, editingTaskId);
         setEditingTaskId(null);
     }
+    async function handleSetDoneColumn(columnId) {
+        if (!currentProject)
+            return;
+        const db = await getDb();
+        await setDoneColumnAction(db, currentProject.id, columnId);
+    }
     async function handleDragEnd(event) {
         const activeId = String(event.active.id);
         const overId = event.over ? String(event.over.id) : null;
@@ -125,7 +132,7 @@ export function KanbanBoard() {
         const db = await getDb();
         await moveTaskAction(db, move);
     }
-    return (_jsx(DndContext, { sensors: sensors, collisionDetection: closestCorners, onDragEnd: (e) => void handleDragEnd(e), children: _jsxs("div", { className: "flex h-full gap-4 overflow-x-auto p-4", children: [_jsx(SortableContext, { items: columns.map((c) => c.id), strategy: horizontalListSortingStrategy, children: columns.map((c) => (_jsx(KanbanColumn, { column: c, tasks: tasksByColumn.get(c.id) ?? [], onRename: (id, name) => void handleRename(id, name), onRequestDelete: (col) => void handleRequestDelete(col), onAddTask: (columnId, title) => void handleAddTask(columnId, title), onTaskClick: (t) => setEditingTaskId(t.id), draggable: true }, c.id))) }), _jsx("div", { className: "w-72 shrink-0", children: adding ? (_jsx("input", { autoFocus: true, value: newName, placeholder: "\u5217\u540D", onChange: (e) => setNewName(e.target.value), onKeyDown: handleAddKey, onBlur: () => void handleAddColumn(), className: "w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm outline-none focus:border-gray-500" })) : (_jsx("button", { type: "button", "aria-label": "\u5217\u3092\u8FFD\u52A0", onClick: () => {
+    return (_jsx(DndContext, { sensors: sensors, collisionDetection: closestCorners, onDragEnd: (e) => void handleDragEnd(e), children: _jsxs("div", { className: "flex h-full gap-4 overflow-x-auto p-4", children: [_jsx(SortableContext, { items: columns.map((c) => c.id), strategy: horizontalListSortingStrategy, children: columns.map((c) => (_jsx(KanbanColumn, { column: c, tasks: tasksByColumn.get(c.id) ?? [], onRename: (id, name) => void handleRename(id, name), onRequestDelete: (col) => void handleRequestDelete(col), onAddTask: (columnId, title) => void handleAddTask(columnId, title), onTaskClick: (t) => setEditingTaskId(t.id), isDoneColumn: currentProject?.doneColumnId === c.id, onSetDoneColumn: (id) => void handleSetDoneColumn(id), draggable: true }, c.id))) }), _jsx("div", { className: "w-72 shrink-0", children: adding ? (_jsx("input", { autoFocus: true, value: newName, placeholder: "\u5217\u540D", onChange: (e) => setNewName(e.target.value), onKeyDown: handleAddKey, onBlur: () => void handleAddColumn(), className: "w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm outline-none focus:border-gray-500" })) : (_jsx("button", { type: "button", "aria-label": "\u5217\u3092\u8FFD\u52A0", onClick: () => {
                             setAdding(true);
                             setNewName("");
                         }, className: "w-full rounded-lg border border-dashed border-gray-300 bg-white/50 px-3 py-2 text-sm text-gray-500 hover:bg-white", children: "\uFF0B \u5217\u3092\u8FFD\u52A0" })) }), deleteTarget && (_jsx(DeleteColumnDialog, { open: true, column: deleteTarget.column, otherColumns: columns.filter((c) => c.id !== deleteTarget.column.id), taskCount: deleteTarget.taskCount, onCascade: () => void handleCascade(), onMoveAndDelete: (id) => void handleMoveAndDelete(id), onCancel: () => setDeleteTarget(null) })), _jsx(TaskDetailDialog, { open: !!editingTask, task: editingTask, onSave: (patch) => void handleSaveTask(patch), onDelete: () => void handleDeleteTask(), onClose: () => setEditingTaskId(null) })] }) }));

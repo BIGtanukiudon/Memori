@@ -4,6 +4,7 @@ export function rowToProject(r) {
         id: r.id,
         name: r.name,
         position: r.position,
+        doneColumnId: r.done_column_id,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
     };
@@ -26,6 +27,7 @@ export function rowToTask(r) {
         dueDate: r.due_date,
         priority: parsePriority(r.priority),
         position: r.position,
+        completedAt: r.completed_at,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
     };

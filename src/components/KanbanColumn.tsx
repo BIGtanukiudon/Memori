@@ -17,6 +17,8 @@ export interface KanbanColumnProps {
   onRename?: (id: string, newName: string) => void;
   onRequestDelete?: (column: Column) => void;
   onAddTask?: (columnId: string, title: string) => void;
+  isDoneColumn?: boolean;
+  onSetDoneColumn?: (columnId: string | null) => void;
   draggable?: boolean;
 }
 
@@ -27,6 +29,8 @@ export function KanbanColumn({
   onRename,
   onRequestDelete,
   onAddTask,
+  isDoneColumn = false,
+  onSetDoneColumn,
   draggable = false,
 }: KanbanColumnProps) {
   const { setNodeRef: setDroppableRef } = useDroppable({
@@ -119,6 +123,27 @@ export function KanbanColumn({
               >
                 ✎
               </button>
+            )}
+            {onSetDoneColumn && (
+              isDoneColumn ? (
+                <button
+                  type="button"
+                  aria-label={`${column.name}の完了列を解除`}
+                  onClick={() => onSetDoneColumn(null)}
+                  className="px-1 text-xs text-green-600 opacity-0 group-hover:opacity-100 hover:text-green-800"
+                >
+                  ✓
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`${column.name}を完了列に設定`}
+                  onClick={() => onSetDoneColumn(column.id)}
+                  className="px-1 text-xs text-gray-400 opacity-0 group-hover:opacity-100 hover:text-green-600"
+                >
+                  ○
+                </button>
+              )
             )}
             {onRequestDelete && (
               <button

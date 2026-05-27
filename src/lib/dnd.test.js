@@ -10,6 +10,7 @@ const t = (id, columnId, position) => ({
     dueDate: null,
     priority: Priority.None,
     position,
+    completedAt: null,
     createdAt: "",
     updatedAt: "",
 });

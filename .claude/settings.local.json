@@ -7,7 +7,14 @@
       "Bash(pnpm add *)",
       "Bash(pnpm test *)",
       "Bash(pkill -f \"cargo test\")",
-      "Bash(pkill -f rustc)"
+      "Bash(pkill -f rustc)",
+      "Bash(task --version)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(cargo test *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npx vite *)",
+      "Bash(git *)"
     ]
   }
 }

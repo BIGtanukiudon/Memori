@@ -43,7 +43,7 @@ describe("createTask", () => {
             t.updatedAt,
         ]);
     });
-    it("memo/dueDate省略時はnull、優先度省略時はNone", async () => {
+    it("memo/dueDate省略時はnull、優先度省略時はNone、completedAtはnull", async () => {
         const db = createMockDb();
         db.select.mockResolvedValueOnce([{ next: 0 }]);
         const t = await createTask(db, {
@@ -54,6 +54,7 @@ describe("createTask", () => {
         expect(t.memo).toBeNull();
         expect(t.dueDate).toBeNull();
         expect(t.priority).toBe(Priority.None);
+        expect(t.completedAt).toBeNull();
     });
     it("タイトルは必須で前後空白はトリム", async () => {
         const db = createMockDb();
@@ -76,6 +77,7 @@ describe("listTasks/listTasksByProject/listTasksByColumn", () => {
         due_date: null,
         priority: 0,
         position: 0,
+        completed_at: null,
         created_at: "2026-05-12T10:00:00.000Z",
         updated_at: "2026-05-12T10:00:00.000Z",
         ...over,
@@ -148,6 +150,20 @@ describe("updateTaskColumn", () => {
         expect(params).toHaveLength(3);
         expect(params[0]).toBe("C2");
         expect(params[2]).toBe("T");
+    });
+    it("completedAtを指定すると completed_at も更新する", async () => {
+        const db = createMockDb();
+        await updateTaskColumn(db, "T", "C2", "2026-05-12T12:00:00.000Z");
+        const [sql, params] = db.execute.mock.calls[0];
+        expect(sql).toMatch(/completed_at = /i);
+        expect(params).toContain("2026-05-12T12:00:00.000Z");
+    });
+    it("completedAtにnullを指定すると completed_at をクリアする", async () => {
+        const db = createMockDb();
+        await updateTaskColumn(db, "T", "C2", null);
+        const [sql, params] = db.execute.mock.calls[0];
+        expect(sql).toMatch(/completed_at = /i);
+        expect(params).toContain(null);
     });
 });
 describe("reorderTasks", () => {

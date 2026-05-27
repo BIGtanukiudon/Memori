@@ -6,6 +6,7 @@ import {
   renameColumn,
   reorderColumns,
 } from "@/db/columns";
+import { updateDoneColumn } from "@/db/projects";
 import type { Column } from "@/types/domain";
 import { useBoardStore } from "@/store/boardStore";
 
@@ -31,7 +32,16 @@ export async function renameColumnAction(
   store.upsertColumn({ ...target, name: name.trim() });
 }
 
+async function clearDoneColumnIfNeeded(db: Db, columnId: string): Promise<void> {
+  const store = useBoardStore.getState();
+  const project = store.projects.find((p) => p.doneColumnId === columnId);
+  if (!project) return;
+  await updateDoneColumn(db, project.id, null);
+  store.upsertProject({ ...project, doneColumnId: null });
+}
+
 export async function deleteColumnCascadeAction(db: Db, id: string): Promise<void> {
+  await clearDoneColumnIfNeeded(db, id);
   await deleteColumn(db, id);
   useBoardStore.getState().removeColumn(id);
 }
@@ -41,6 +51,7 @@ export async function deleteColumnAfterMoveAction(
   fromColumnId: string,
   toColumnId: string,
 ): Promise<void> {
+  await clearDoneColumnIfNeeded(db, fromColumnId);
   await moveTasksToColumn(db, fromColumnId, toColumnId);
   await deleteColumn(db, fromColumnId);
 
