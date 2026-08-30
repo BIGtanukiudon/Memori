@@ -12,7 +12,7 @@ Windowsデスクトップ向けのカンバンタスク管理ツール。プロ�
 - **タスク詳細編集**: タイトル・メモ・期日・優先度をモーダルで編集
 - **クイック入力ウィンドウ**: `app.exe --quick` で呼び出せる軽量入力ウィンドウ（AHK等のホットキーから利用）
 - **全タスク一覧ビュー**: プロジェクト横断でフィルタ・ソート可能なリストビュー
-- **作業ログ**: タスクに対して時系列で作業記録を書き足せる。タスク詳細モーダルから追加・編集・削除。日報・週報の材料としてCLI経由でAIに読ませることを主目的とする
+- **作業ログ**: タスクに対して時系列で作業記録を書き足せる。タスク詳細モーダルから追加・編集・削除。`app.exe --quick-log` の軽量ウィンドウからも追記可能。日報・週報の材料としてCLI経由でAIに読ませることを主目的とする
 - **シングルインスタンス制御**: 2重起動を防ぎ、既存プロセスへ argv を受け渡し
 - **CLIサブコマンド**: `app.exe task add/list/move/done`、`app.exe project add/list/rename/delete`、`app.exe log list` でAIエージェント（Claude Code等）や任意スクリプトからタスク・プロジェクト・作業ログ操作
 
@@ -67,12 +67,23 @@ DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_in
 | ウィンドウ | label | 用途 | サイズ | 常に前面 |
 |---|---|---|---|---|
 | メイン | `main` | カンバンボード本体 | 1200×800（可変） | No |
-| クイック入力 | `quick` | `--quick` で呼び出される軽量入力 | 400×250 | Yes |
+| クイック入力 | `quick` | `--quick`（タスク追加）/ `--quick-log`（作業ログ追加）で呼び出される軽量入力 | 400×250 | Yes |
 
 両ウィンドウは初期 `visible=false` で起動し、Rust側 `setup()` がargvに応じて該当ウィンドウを `show()` + `set_focus()` します。クイック入力ウィンドウは毎回 `hide()`/`show()` で使い回し、入力フォーム状態は表示ごとにリセット。
 
 - **メインウィンドウ ×ボタン**: アプリ全体を終了 (`app.exit(0)`)。プロセスが残らないため、再起動時に single-instance 制御で起動できなくなる問題を防ぎます。
-- **クイック入力ウィンドウ ×ボタン**: クローズを抑止して `hide()` のみ実行。再度 `--quick` で呼び出された際に即座に再表示できます。
+- **クイック入力ウィンドウ ×ボタン**: クローズを抑止して `hide()` のみ実行。再度 `--quick` / `--quick-log` で呼び出された際に即座に再表示できます。
+
+### クイックウィンドウのモード切替（`--quick` / `--quick-log`）
+
+`quick` ウィンドウは1つのまま、起動argvに応じて中身（タスク追加フォーム／作業ログ追加フォーム）を切り替えます。`is_quick_invocation` と `is_quick_log_invocation`（[`src-tauri/src/lib.rs`](./src-tauri/src/lib.rs)）は完全一致比較のため互いに前方一致で誤爆しません。
+
+モードの判定をJS側へ伝える経路は2つあります。
+
+- `get_quick_mode` コマンド: `QuickApp` のマウント時に一度呼び出し、現在のモードを確実に取得する（起動直後はイベントのlisten登録が間に合わない可能性があるため）
+- `quick:mode` イベント: ウィンドウがすでに開いている状態で再度 `--quick` / `--quick-log` が実行された場合に、モード切り替えとフォームリセットをその場で反映する
+
+作業ログモードの対象タスクは `getLastLoggedTaskId`（[`src/db/workLogs.ts`](./src/db/workLogs.ts)）で直近ログの対象タスクを既定値にします。対象タスクが削除済みの場合は現存する直近のタスクまで遡り、それでも見つからなければ対象タスク欄にフォーカスして選択を必須にします。対象タスクの検索候補は `searchTasksForLog`（[`src/db/tasks.ts`](./src/db/tasks.ts)）が全プロジェクト横断・完了タスクも含む（未完了が先）形で最大20件返します。
 
 ## ウィンドウ間同期
 
@@ -84,6 +95,8 @@ DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_in
 | `task:updated` | `{ task_id, project_id }` | 該当タスク更新 |
 | `task:deleted` | `{ task_id, project_id }` | 該当タスク除外 |
 | `project:changed` | `{ project_id }` | 列構成・プロジェクト一覧の再フェッチ |
+| `worklog:added` | `{ task_id, project_id }` | クイックログウィンドウでの追記をメインウィンドウ側へ反映（`useBoardSync` の `onWorkLogAdded` で購読） |
+| `quick:mode` | `{ mode: "task" \| "log" }` | Rust側からquickウィンドウの表示モードをJSへ通知（`--quick` / `--quick-log` の起動・再表示のたびに送信） |
 
 **CLI / 外部からのDB直接更新**はウィンドウ間イベントを発火しないため、メインウィンドウのフォーカス復帰時に再フェッチして同期します。
 
@@ -117,6 +130,9 @@ pnpm tauri:dev
 
 # クイック入力ウィンドウを起動時に前面表示
 pnpm tauri:dev:quick
+
+# クイック入力ウィンドウを作業ログ追加モードで起動時に前面表示
+pnpm tauri:dev:quick-log
 ```
 
 ## ビルド
@@ -164,12 +180,16 @@ cd src-tauri && cargo test --lib
 AutoHotKeyからグローバルショートカットでクイック入力を呼び出せます。
 
 ```ahk
-^+Space::  ; Ctrl+Shift+Space
+^+Space::  ; Ctrl+Shift+Space: タスク追加
   Run, "C:\path\to\app.exe" --quick
+return
+
+^+L::  ; Ctrl+Shift+L: 作業ログ追加
+  Run, "C:\path\to\app.exe" --quick-log
 return
 ```
 
-すでに起動済みの場合は既存プロセスのクイック入力ウィンドウがフォーカスされます（シングルインスタンス制御）。
+すでに起動済みの場合は既存プロセスのクイック入力ウィンドウがフォーカスされます（シングルインスタンス制御）。`--quick` と `--quick-log` は別ホットキーに割り当ててください（同じ `quick` ウィンドウがモードだけ切り替わって再表示されます）。
 
 ## CLI（`app.exe task ...`）
 
@@ -297,7 +317,7 @@ app.exe log --help
 | 9 | CLIサブコマンド (`app.exe task ...` / `app.exe project ...` / `app.exe log ...`) | ✅ |
 | 10 | 完了列機能（カラムを完了列に指定、タスク移動時に `completedAt` 自動記録） | ✅ |
 | 11 | 作業ログ（タスク詳細モーダルでの追加・編集・削除、`app.exe log list` によるMarkdown出力） | ✅ |
-| 12 | 作業ログ: クイック入力ウィンドウのログモード（`--quick-log`） | 未着手（対象タスク指定方法が未決） |
+| 12 | 作業ログ: クイック入力ウィンドウのログモード（`--quick-log`） | ✅ |
 | 13 | 作業ログ: アプリ内タイムラインビュー | 未着手 |
 | 14 | MCPサーバー実装 | 未着手 |
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWorkLog, deleteWorkLog, listWorkLogsByTask, updateWorkLog } from "./workLogs";
+import { createWorkLog, deleteWorkLog, getLastLoggedTaskId, listWorkLogsByTask, updateWorkLog, } from "./workLogs";
 import { createMockDb } from "../../tests/helpers/mockDb";
 describe("createWorkLog", () => {
     beforeEach(() => {
@@ -95,5 +95,33 @@ describe("deleteWorkLog", () => {
         const [sql, params] = db.execute.mock.calls[0];
         expect(sql).toMatch(/DELETE FROM work_logs WHERE id = /i);
         expect(params).toEqual(["L1"]);
+    });
+});
+describe("getLastLoggedTaskId", () => {
+    it("ログが0件ならnullを返す", async () => {
+        const db = createMockDb();
+        db.select.mockResolvedValueOnce([]);
+        const id = await getLastLoggedTaskId(db);
+        expect(id).toBeNull();
+    });
+    it("直近ログ(created_at DESC)の対象タスクIDを返す", async () => {
+        const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ task_id: "T1" }]);
+        const id = await getLastLoggedTaskId(db);
+        expect(id).toBe("T1");
+        const [sql] = db.select.mock.calls[0];
+        expect(sql).toMatch(/ORDER BY .*created_at DESC/is);
+        expect(sql).toMatch(/LIMIT 1/i);
+    });
+    it("現存するtasksへ内部結合し、削除済みタスクを指すログを除外する", async () => {
+        // work_logsをtasksへJOIN(LEFT JOINではなく)することで、削除済みタスクを指すログは
+        // 結果から自然に除外され、現存タスクを指す最新ログだけが返る
+        const db = createMockDb();
+        db.select.mockResolvedValueOnce([{ task_id: "T_EXISTING" }]);
+        const id = await getLastLoggedTaskId(db);
+        expect(id).toBe("T_EXISTING");
+        const [sql] = db.select.mock.calls[0];
+        expect(sql).toMatch(/JOIN tasks/i);
+        expect(sql).not.toMatch(/LEFT JOIN tasks/i);
     });
 });

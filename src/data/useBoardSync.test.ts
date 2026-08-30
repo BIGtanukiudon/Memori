@@ -5,10 +5,12 @@ const listenTaskCreated = vi.fn();
 const listenTaskUpdated = vi.fn();
 const listenTaskDeleted = vi.fn();
 const listenProjectChanged = vi.fn();
+const listenWorkLogAdded = vi.fn();
 const unlistenTaskCreated = vi.fn();
 const unlistenTaskUpdated = vi.fn();
 const unlistenTaskDeleted = vi.fn();
 const unlistenProjectChanged = vi.fn();
+const unlistenWorkLogAdded = vi.fn();
 
 vi.mock("@/lib/events", () => ({
   EVENT_NAMES: {
@@ -16,11 +18,13 @@ vi.mock("@/lib/events", () => ({
     taskUpdated: "task:updated",
     taskDeleted: "task:deleted",
     projectChanged: "project:changed",
+    workLogAdded: "worklog:added",
   },
   listenTaskCreated: (...a: unknown[]) => listenTaskCreated(...a),
   listenTaskUpdated: (...a: unknown[]) => listenTaskUpdated(...a),
   listenTaskDeleted: (...a: unknown[]) => listenTaskDeleted(...a),
   listenProjectChanged: (...a: unknown[]) => listenProjectChanged(...a),
+  listenWorkLogAdded: (...a: unknown[]) => listenWorkLogAdded(...a),
 }));
 
 import { useBoardSync } from "./useBoardSync";
@@ -30,10 +34,12 @@ beforeEach(() => {
   listenTaskUpdated.mockReset().mockResolvedValue(unlistenTaskUpdated);
   listenTaskDeleted.mockReset().mockResolvedValue(unlistenTaskDeleted);
   listenProjectChanged.mockReset().mockResolvedValue(unlistenProjectChanged);
+  listenWorkLogAdded.mockReset().mockResolvedValue(unlistenWorkLogAdded);
   unlistenTaskCreated.mockReset();
   unlistenTaskUpdated.mockReset();
   unlistenTaskDeleted.mockReset();
   unlistenProjectChanged.mockReset();
+  unlistenWorkLogAdded.mockReset();
 });
 
 describe("useBoardSync", () => {
@@ -79,5 +85,52 @@ describe("useBoardSync", () => {
     expect(unlistenTaskUpdated).toHaveBeenCalled();
     expect(unlistenTaskDeleted).toHaveBeenCalled();
     expect(unlistenProjectChanged).toHaveBeenCalled();
+  });
+
+  it("onWorkLogAdded を渡さない場合は worklog:added を listen しない", async () => {
+    renderHook(() => useBoardSync({ onTaskEvent: vi.fn(), onProjectChanged: vi.fn() }));
+    await Promise.resolve();
+    expect(listenWorkLogAdded).not.toHaveBeenCalled();
+  });
+
+  it("onWorkLogAdded を渡すと worklog:added を listen する", async () => {
+    const onWorkLogAdded = vi.fn();
+    renderHook(() =>
+      useBoardSync({ onTaskEvent: vi.fn(), onProjectChanged: vi.fn(), onWorkLogAdded }),
+    );
+    await Promise.resolve();
+    expect(listenWorkLogAdded).toHaveBeenCalled();
+  });
+
+  it("worklog:added の受信で onWorkLogAdded(payload) が呼ばれる", async () => {
+    const onWorkLogAdded = vi.fn();
+    let captured: ((p: { taskId: string; projectId: string }) => void) | null = null;
+    listenWorkLogAdded.mockImplementationOnce(async (cb) => {
+      captured = cb;
+      return unlistenWorkLogAdded;
+    });
+
+    renderHook(() =>
+      useBoardSync({ onTaskEvent: vi.fn(), onProjectChanged: vi.fn(), onWorkLogAdded }),
+    );
+    await Promise.resolve();
+
+    captured!({ taskId: "T1", projectId: "P1" });
+    expect(onWorkLogAdded).toHaveBeenCalledWith({ taskId: "T1", projectId: "P1" });
+  });
+
+  it("onWorkLogAdded 指定時はアンマウントで unlisten される", async () => {
+    const { unmount } = renderHook(() =>
+      useBoardSync({
+        onTaskEvent: vi.fn(),
+        onProjectChanged: vi.fn(),
+        onWorkLogAdded: vi.fn(),
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    unmount();
+    await Promise.resolve();
+    expect(unlistenWorkLogAdded).toHaveBeenCalled();
   });
 });

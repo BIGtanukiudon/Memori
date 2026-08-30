@@ -6,6 +6,8 @@ export const EVENT_NAMES = {
   taskUpdated: "task:updated",
   taskDeleted: "task:deleted",
   projectChanged: "project:changed",
+  workLogAdded: "worklog:added",
+  quickModeChanged: "quick:mode",
 } as const;
 
 export interface TaskEventPayload {
@@ -15,6 +17,18 @@ export interface TaskEventPayload {
 
 export interface ProjectEventPayload {
   projectId: string;
+}
+
+export interface WorkLogEventPayload {
+  taskId: string;
+  projectId: string;
+}
+
+/** quick ウィンドウの表示モード。Rust側の QUICK_MODE_TASK/QUICK_MODE_LOG に対応。 */
+export type QuickMode = "task" | "log";
+
+export interface QuickModeEventPayload {
+  mode: QuickMode;
 }
 
 const NOOP_UNLISTEN: UnlistenFn = () => {};
@@ -48,6 +62,10 @@ export function emitProjectChanged(p: ProjectEventPayload): Promise<void> {
   return safeEmit(EVENT_NAMES.projectChanged, p);
 }
 
+export function emitWorkLogAdded(p: WorkLogEventPayload): Promise<void> {
+  return safeEmit(EVENT_NAMES.workLogAdded, p);
+}
+
 export function listenTaskCreated(
   cb: (p: TaskEventPayload) => void,
 ): Promise<UnlistenFn> {
@@ -70,4 +88,16 @@ export function listenProjectChanged(
   cb: (p: ProjectEventPayload) => void,
 ): Promise<UnlistenFn> {
   return safeListen(EVENT_NAMES.projectChanged, cb);
+}
+
+export function listenWorkLogAdded(
+  cb: (p: WorkLogEventPayload) => void,
+): Promise<UnlistenFn> {
+  return safeListen(EVENT_NAMES.workLogAdded, cb);
+}
+
+export function listenQuickModeChanged(
+  cb: (p: QuickModeEventPayload) => void,
+): Promise<UnlistenFn> {
+  return safeListen(EVENT_NAMES.quickModeChanged, cb);
 }

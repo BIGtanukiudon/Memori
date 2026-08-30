@@ -5,6 +5,8 @@ export const EVENT_NAMES = {
     taskUpdated: "task:updated",
     taskDeleted: "task:deleted",
     projectChanged: "project:changed",
+    workLogAdded: "worklog:added",
+    quickModeChanged: "quick:mode",
 };
 const NOOP_UNLISTEN = () => { };
 function safeEmit(name, payload) {
@@ -29,6 +31,9 @@ export function emitTaskDeleted(p) {
 export function emitProjectChanged(p) {
     return safeEmit(EVENT_NAMES.projectChanged, p);
 }
+export function emitWorkLogAdded(p) {
+    return safeEmit(EVENT_NAMES.workLogAdded, p);
+}
 export function listenTaskCreated(cb) {
     return safeListen(EVENT_NAMES.taskCreated, cb);
 }
@@ -40,4 +45,10 @@ export function listenTaskDeleted(cb) {
 }
 export function listenProjectChanged(cb) {
     return safeListen(EVENT_NAMES.projectChanged, cb);
+}
+export function listenWorkLogAdded(cb) {
+    return safeListen(EVENT_NAMES.workLogAdded, cb);
+}
+export function listenQuickModeChanged(cb) {
+    return safeListen(EVENT_NAMES.quickModeChanged, cb);
 }

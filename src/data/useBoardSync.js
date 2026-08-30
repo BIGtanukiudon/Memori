@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { listenProjectChanged, listenTaskCreated, listenTaskDeleted, listenTaskUpdated, } from "@/lib/events";
-export function useBoardSync({ onTaskEvent, onProjectChanged }) {
+import { listenProjectChanged, listenTaskCreated, listenTaskDeleted, listenTaskUpdated, listenWorkLogAdded, } from "@/lib/events";
+export function useBoardSync({ onTaskEvent, onProjectChanged, onWorkLogAdded, }) {
     useEffect(() => {
         let cancelled = false;
         const unlisteners = [];
@@ -16,10 +16,13 @@ export function useBoardSync({ onTaskEvent, onProjectChanged }) {
         void listenTaskUpdated((p) => onTaskEvent("updated", p)).then(register);
         void listenTaskDeleted((p) => onTaskEvent("deleted", p)).then(register);
         void listenProjectChanged(onProjectChanged).then(register);
+        if (onWorkLogAdded) {
+            void listenWorkLogAdded(onWorkLogAdded).then(register);
+        }
         return () => {
             cancelled = true;
             for (const u of unlisteners)
                 u();
         };
-    }, [onTaskEvent, onProjectChanged]);
+    }, [onTaskEvent, onProjectChanged, onWorkLogAdded]);
 }

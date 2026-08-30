@@ -11,7 +11,7 @@ beforeEach(() => {
 afterEach(() => {
     delete window.__TAURI_INTERNALS__;
 });
-import { emitTaskCreated, emitTaskUpdated, emitTaskDeleted, emitProjectChanged, listenTaskCreated, listenTaskUpdated, listenTaskDeleted, listenProjectChanged, EVENT_NAMES, } from "./events";
+import { emitTaskCreated, emitTaskUpdated, emitTaskDeleted, emitProjectChanged, emitWorkLogAdded, listenTaskCreated, listenTaskUpdated, listenTaskDeleted, listenProjectChanged, listenWorkLogAdded, listenQuickModeChanged, EVENT_NAMES, } from "./events";
 beforeEach(() => {
     emitMock.mockReset();
     listenMock.mockReset().mockResolvedValue(() => { });
@@ -44,6 +44,13 @@ describe("emit", () => {
             projectId: "P1",
         });
     });
+    it("emitWorkLogAdded は worklog:added を emit する", async () => {
+        await emitWorkLogAdded({ taskId: "T1", projectId: "P1" });
+        expect(emitMock).toHaveBeenCalledWith(EVENT_NAMES.workLogAdded, {
+            taskId: "T1",
+            projectId: "P1",
+        });
+    });
 });
 describe("listen", () => {
     it("listenTaskCreated は task:created を listen する", async () => {
@@ -62,6 +69,14 @@ describe("listen", () => {
     it("listenProjectChanged", async () => {
         await listenProjectChanged(vi.fn());
         expect(listenMock).toHaveBeenCalledWith(EVENT_NAMES.projectChanged, expect.any(Function));
+    });
+    it("listenWorkLogAdded", async () => {
+        await listenWorkLogAdded(vi.fn());
+        expect(listenMock).toHaveBeenCalledWith(EVENT_NAMES.workLogAdded, expect.any(Function));
+    });
+    it("listenQuickModeChanged", async () => {
+        await listenQuickModeChanged(vi.fn());
+        expect(listenMock).toHaveBeenCalledWith(EVENT_NAMES.quickModeChanged, expect.any(Function));
     });
     it("listener はペイロードを受け取る", async () => {
         const cb = vi.fn();

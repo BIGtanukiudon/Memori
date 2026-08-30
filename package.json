@@ -14,7 +14,8 @@
     "lint": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:dev:quick": "tauri dev -- -- --quick"
+    "tauri:dev:quick": "tauri dev -- -- --quick",
+    "tauri:dev:quick-log": "tauri dev -- -- --quick-log"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

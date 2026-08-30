@@ -51,3 +51,13 @@ export async function updateWorkLog(db, id, body) {
 export async function deleteWorkLog(db, id) {
     await db.execute("DELETE FROM work_logs WHERE id = ?", [id]);
 }
+// 直近ログの対象タスクID。tasksへ内部結合することで、削除済みタスクを指すログは
+// 自然に除外され、現存するタスクを指す最新のログが見つかるまで遡る（ADR-0002）。
+export async function getLastLoggedTaskId(db) {
+    const rows = await db.select(`SELECT wl.task_id AS task_id
+     FROM work_logs wl
+     JOIN tasks t ON t.id = wl.task_id
+     ORDER BY wl.created_at DESC
+     LIMIT 1`);
+    return rows[0]?.task_id ?? null;
+}

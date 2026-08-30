@@ -6,6 +6,7 @@ import {
   listTasksByColumn,
   listTasksByProject,
   reorderTasks,
+  searchTasksForLog,
   updateTask,
   updateTaskColumn,
 } from "./tasks";
@@ -224,5 +225,89 @@ describe("deleteTask", () => {
     const [sql, params] = db.execute.mock.calls[0]!;
     expect(sql).toMatch(/DELETE FROM tasks WHERE id = /i);
     expect(params).toEqual(["T"]);
+  });
+});
+
+describe("searchTasksForLog", () => {
+  it("空クエリでは絞り込み条件なしで直近ログ順の候補を返す", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([
+      {
+        id: "T1",
+        title: "実装する",
+        project_id: "P1",
+        project_name: "開発",
+        completed_at: null,
+      },
+    ]);
+
+    const res = await searchTasksForLog(db, "");
+
+    expect(res).toEqual([
+      { id: "T1", title: "実装する", projectId: "P1", projectName: "開発", completedAt: null },
+    ]);
+    const [sql, params] = db.select.mock.calls[0]!;
+    expect(sql).not.toMatch(/WHERE/i);
+    expect(sql).toMatch(/ORDER BY/i);
+    expect(sql).toMatch(/LIMIT 20/i);
+    expect(params).toEqual([]);
+  });
+
+  it("タイトル部分一致(大文字小文字を区別しない)で絞り込む", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([]);
+
+    await searchTasksForLog(db, "ABC");
+
+    const [sql, params] = db.select.mock.calls[0]!;
+    expect(sql).toMatch(/WHERE t\.title LIKE .*COLLATE NOCASE/is);
+    expect(params).toEqual(["%ABC%"]);
+  });
+
+  it("クエリの前後空白はトリムしてから検索する", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([]);
+
+    await searchTasksForLog(db, "  abc  ");
+
+    const [, params] = db.select.mock.calls[0]!;
+    expect(params).toEqual(["%abc%"]);
+  });
+
+  it("未完了を先、完了を後ろにするORDER BYを発行する", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([]);
+
+    await searchTasksForLog(db, "");
+
+    const [sql] = db.select.mock.calls[0]!;
+    expect(sql).toMatch(/ORDER BY.*completed_at IS NOT NULL/is);
+  });
+
+  it("完了タスクも候補に含め、completedAtを返す", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([
+      {
+        id: "T2",
+        title: "完了済み",
+        project_id: "P1",
+        project_name: "開発",
+        completed_at: "2026-08-29T00:00:00.000Z",
+      },
+    ]);
+
+    const res = await searchTasksForLog(db, "");
+
+    expect(res[0]!.completedAt).toBe("2026-08-29T00:00:00.000Z");
+  });
+
+  it("上限20件を発行する", async () => {
+    const db = createMockDb();
+    db.select.mockResolvedValueOnce([]);
+
+    await searchTasksForLog(db, "");
+
+    const [sql] = db.select.mock.calls[0]!;
+    expect(sql).toMatch(/LIMIT 20/);
   });
 });

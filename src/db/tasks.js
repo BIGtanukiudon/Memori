@@ -97,3 +97,36 @@ export async function reorderTasks(db, _columnId, orderedIds) {
 export async function deleteTask(db, id) {
     await db.execute("DELETE FROM tasks WHERE id = ?", [id]);
 }
+function rowToTaskSearchResult(r) {
+    return {
+        id: r.id,
+        title: r.title,
+        projectId: r.project_id,
+        projectName: r.project_name,
+        completedAt: r.completed_at,
+    };
+}
+const TASK_SEARCH_FOR_LOG_LIMIT = 20;
+// クイックログウィンドウの対象タスク検索。全プロジェクト横断、削除済みタスクは
+// tasksに存在しないため自動的に除外される。完了タスクも候補に含めるが、
+// 並びは未完了を先・完了を後ろにする。queryが空なら直近ログ順で返す。
+export async function searchTasksForLog(db, query) {
+    const trimmed = query.trim();
+    const params = [];
+    let where = "";
+    if (trimmed.length > 0) {
+        where = "WHERE t.title LIKE ? COLLATE NOCASE";
+        params.push(`%${trimmed}%`);
+    }
+    const rows = await db.select(`SELECT t.id AS id, t.title AS title, t.project_id AS project_id,
+            p.name AS project_name, t.completed_at AS completed_at
+     FROM tasks t
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN (
+       SELECT task_id, MAX(created_at) AS last_logged_at FROM work_logs GROUP BY task_id
+     ) wl ON wl.task_id = t.id
+     ${where}
+     ORDER BY (t.completed_at IS NOT NULL) ASC, wl.last_logged_at DESC, t.created_at DESC
+     LIMIT ${TASK_SEARCH_FOR_LOG_LIMIT}`, params);
+    return rows.map(rowToTaskSearchResult);
+}
