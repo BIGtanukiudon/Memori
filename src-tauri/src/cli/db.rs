@@ -10,7 +10,7 @@ use chrono::SecondsFormat;
 use rusqlite::{params, Connection, OptionalExtension};
 use ulid::Ulid;
 
-use super::output::{ProjectListRow, TaskListRow};
+use super::output::{ProjectListRow, TaskListRow, WorkLogListRow};
 
 const APP_IDENTIFIER: &str = "com.memori.app";
 const DB_FILENAME: &str = "kanban.db";
@@ -44,7 +44,9 @@ pub fn init_schema_for_test(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(include_str!("../../migrations/002_project_position.sql"))
         .map_err(|e| format!("マイグレーション002失敗: {e}"))?;
     conn.execute_batch(include_str!("../../migrations/003_done_column.sql"))
-        .map_err(|e| format!("マイグレーション003失敗: {e}"))
+        .map_err(|e| format!("マイグレーション003失敗: {e}"))?;
+    conn.execute_batch(include_str!("../../migrations/004_work_logs.sql"))
+        .map_err(|e| format!("マイグレーション004失敗: {e}"))
 }
 
 fn now_iso() -> String {
@@ -412,6 +414,87 @@ pub fn delete_project(
         id: id.to_string(),
         name,
     })
+}
+
+// ── work_logs (log list) ──
+
+/// `project_ref` をID優先→名前の順で解決する。work_logsのフィルタ用。
+/// (`task list` の `--project` は名前一致のみだが、`log list` は名前/IDどちらも許す仕様)
+fn resolve_project_id(conn: &Connection, project_ref: &str) -> Result<String, String> {
+    let by_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM projects WHERE id = ?",
+            params![project_ref],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("プロジェクト検索失敗: {e}"))?;
+    if let Some(id) = by_id {
+        return Ok(id);
+    }
+    conn.query_row(
+        "SELECT id FROM projects WHERE name = ?",
+        params![project_ref],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(|e| format!("プロジェクト検索失敗: {e}"))?
+    .ok_or_else(|| format!("プロジェクトが見つかりません: {project_ref}"))
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkLogListFilter<'a> {
+    pub project: Option<&'a str>,
+}
+
+/// `from_utc..to_utc` (半開区間, UTC RFC3339) の作業ログを取得する。
+/// タスク・プロジェクトはLEFT JOINし、削除済みならスナップショット名にフォールバックする。
+pub fn list_work_logs(
+    conn: &Connection,
+    from_utc: &str,
+    to_utc: &str,
+    filter: WorkLogListFilter<'_>,
+) -> Result<Vec<WorkLogListRow>, String> {
+    let project_id = match filter.project {
+        Some(p) => Some(resolve_project_id(conn, p)?),
+        None => None,
+    };
+
+    let mut sql = String::from(
+        "SELECT COALESCE(p.name, wl.project_name), wl.task_id, \
+                COALESCE(t.title, wl.task_title), (t.id IS NULL), \
+                wl.created_at, wl.body \
+         FROM work_logs wl \
+         LEFT JOIN tasks t ON t.id = wl.task_id \
+         LEFT JOIN projects p ON p.id = wl.project_id \
+         WHERE wl.created_at >= ? AND wl.created_at < ?",
+    );
+    let mut binds: Vec<String> = vec![from_utc.to_string(), to_utc.to_string()];
+    if let Some(pid) = &project_id {
+        sql.push_str(" AND wl.project_id = ?");
+        binds.push(pid.clone());
+    }
+    sql.push_str(" ORDER BY 1 ASC, wl.task_id ASC, wl.created_at ASC");
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("SQL準備失敗: {e}"))?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(binds.iter()), |r| {
+            Ok(WorkLogListRow {
+                project_name: r.get(0)?,
+                task_id: r.get(1)?,
+                task_title: r.get(2)?,
+                task_deleted: r.get(3)?,
+                created_at: r.get(4)?,
+                body: r.get(5)?,
+            })
+        })
+        .map_err(|e| format!("list実行失敗: {e}"))?;
+
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(|e| format!("行取得失敗: {e}"))?);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -956,5 +1039,178 @@ mod tests {
 
         let err = delete_project(&conn, "no-such-id", false).unwrap_err();
         assert!(err.contains("見つかりません"));
+    }
+
+    // ── work_logs (log list) tests ──
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_work_log(
+        conn: &Connection,
+        id: &str,
+        task_id: &str,
+        project_id: &str,
+        body: &str,
+        task_title: &str,
+        project_name: &str,
+        created_at: &str,
+    ) {
+        conn.execute(
+            "INSERT INTO work_logs (\
+                id, task_id, project_id, body, task_title, project_name, created_at, updated_at\
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, task_id, project_id, body, task_title, project_name, created_at, created_at],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_work_logs_empty_returns_empty() {
+        let conn = fixture();
+        let rows = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-05-02T00:00:00.000Z",
+            WorkLogListFilter::default(),
+        )
+        .unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn list_work_logs_resolves_current_task_and_project_names() {
+        let conn = fixture();
+        let task = add_task(
+            &conn,
+            AddInput {
+                project: "Dev",
+                status: "Todo",
+                title: "現在のタイトル",
+                memo: None,
+                due: None,
+                priority: None,
+            },
+        )
+        .unwrap();
+        insert_work_log(
+            &conn,
+            "L1",
+            &task.id,
+            "proj-1",
+            "本文",
+            "記録時のタイトル",
+            "記録時のプロジェクト名",
+            "2026-05-10T00:00:00.000Z",
+        );
+
+        let rows = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+            WorkLogListFilter::default(),
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].task_title, "現在のタイトル");
+        assert_eq!(rows[0].project_name, "Dev");
+        assert!(!rows[0].task_deleted);
+    }
+
+    #[test]
+    fn list_work_logs_falls_back_to_snapshot_when_task_deleted() {
+        let conn = fixture();
+        insert_work_log(
+            &conn,
+            "L1",
+            "deleted-task-id",
+            "proj-1",
+            "本文",
+            "記録時のタイトル",
+            "記録時のプロジェクト名",
+            "2026-05-10T00:00:00.000Z",
+        );
+
+        let rows = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+            WorkLogListFilter::default(),
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].task_title, "記録時のタイトル");
+        // proj-1(Dev)は現存するのでプロジェクト名は現在名。タスクのみ削除済み扱い。
+        assert_eq!(rows[0].project_name, "Dev");
+        assert!(rows[0].task_deleted);
+    }
+
+    #[test]
+    fn list_work_logs_excludes_out_of_range_boundaries() {
+        let conn = fixture();
+        insert_work_log(
+            &conn, "before", "t", "proj-1", "範囲外(前)", "T", "Dev", "2026-05-09T23:59:59.999Z",
+        );
+        insert_work_log(
+            &conn, "start", "t", "proj-1", "範囲内(開始)", "T", "Dev", "2026-05-10T00:00:00.000Z",
+        );
+        insert_work_log(
+            &conn, "end_minus", "t", "proj-1", "範囲内(終了直前)", "T", "Dev", "2026-05-10T23:59:59.999Z",
+        );
+        insert_work_log(
+            &conn, "end", "t", "proj-1", "範囲外(終了)", "T", "Dev", "2026-05-11T00:00:00.000Z",
+        );
+
+        let rows = list_work_logs(
+            &conn,
+            "2026-05-10T00:00:00.000Z",
+            "2026-05-11T00:00:00.000Z",
+            WorkLogListFilter::default(),
+        )
+        .unwrap();
+        let bodies: Vec<&str> = rows.iter().map(|r| r.body.as_str()).collect();
+        assert_eq!(bodies, vec!["範囲内(開始)", "範囲内(終了直前)"]);
+    }
+
+    #[test]
+    fn list_work_logs_filters_by_project_name_or_id() {
+        let conn = fixture();
+        insert_work_log(
+            &conn, "L1", "t", "proj-1", "Devの記録", "T", "Dev", "2026-05-10T00:00:00.000Z",
+        );
+        insert_work_log(
+            &conn, "L2", "t", "proj-2", "Otherの記録", "T", "Other", "2026-05-10T00:00:00.000Z",
+        );
+
+        let by_name = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+            WorkLogListFilter { project: Some("Dev") },
+        )
+        .unwrap();
+        assert_eq!(by_name.len(), 1);
+        assert_eq!(by_name[0].body, "Devの記録");
+
+        let by_id = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+            WorkLogListFilter { project: Some("proj-2") },
+        )
+        .unwrap();
+        assert_eq!(by_id.len(), 1);
+        assert_eq!(by_id[0].body, "Otherの記録");
+    }
+
+    #[test]
+    fn list_work_logs_unknown_project_filter_errors() {
+        let conn = fixture();
+        let err = list_work_logs(
+            &conn,
+            "2026-05-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+            WorkLogListFilter { project: Some("Nope") },
+        )
+        .unwrap_err();
+        assert!(err.contains("プロジェクト"));
     }
 }

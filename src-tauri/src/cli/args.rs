@@ -53,6 +53,13 @@ pub struct ProjectDeleteArgs {
     pub force: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LogListArgs {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub project: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
     Add(AddArgs),
@@ -63,6 +70,7 @@ pub enum CliCommand {
     ProjectList,
     ProjectRename(ProjectRenameArgs),
     ProjectDelete(ProjectDeleteArgs),
+    LogList(LogListArgs),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +91,7 @@ pub enum ParseOutcome {
 
 const TASK_SUBCOMMAND: &str = "task";
 const PROJECT_SUBCOMMAND: &str = "project";
+const LOG_SUBCOMMAND: &str = "log";
 
 const TASK_HELP_TEXT: &str = "\
 Memori CLI — task
@@ -144,10 +153,28 @@ DELETE:
   app.exe project delete <id> [--force]
 ";
 
+const LOG_HELP_TEXT: &str = "\
+Memori CLI — log
+
+USAGE:
+  app.exe log <SUBCOMMAND> [OPTIONS]
+  app.exe log --help
+
+SUBCOMMANDS:
+  list   作業ログを一覧表示 (Markdown)
+
+GLOBAL OPTIONS:
+  --db <path>            SQLite DBパスを上書き
+
+LIST:
+  app.exe log list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--project <名前またはID>]
+  (--from / --to 省略時は今日のローカル日付)
+";
+
 pub fn is_cli_argv(argv: &[String]) -> bool {
     matches!(
         argv.get(1).map(|s| s.as_str()),
-        Some(TASK_SUBCOMMAND) | Some(PROJECT_SUBCOMMAND)
+        Some(TASK_SUBCOMMAND) | Some(PROJECT_SUBCOMMAND) | Some(LOG_SUBCOMMAND)
     )
 }
 
@@ -161,6 +188,7 @@ pub fn parse_args(argv: &[String]) -> ParseOutcome {
     match first.as_str() {
         TASK_SUBCOMMAND => parse_task_command(&rest),
         PROJECT_SUBCOMMAND => parse_project_command(&rest),
+        LOG_SUBCOMMAND => parse_log_command(&rest),
         _ => ParseOutcome::NotCli,
     }
 }
@@ -201,6 +229,50 @@ fn parse_project_command(rest: &[String]) -> ParseOutcome {
         "delete" => parse_project_delete(sub_args),
         other => ParseOutcome::Error(format!("未知のサブコマンド: {other}")),
     }
+}
+
+fn parse_log_command(rest: &[String]) -> ParseOutcome {
+    if rest.iter().any(|a| a == "--help" || a == "-h") {
+        return ParseOutcome::Help(LOG_HELP_TEXT.to_string());
+    }
+
+    let Some(sub) = rest.first() else {
+        return ParseOutcome::Help(LOG_HELP_TEXT.to_string());
+    };
+    let sub_args = &rest[1..];
+
+    match sub.as_str() {
+        "list" => parse_log_list(sub_args),
+        other => ParseOutcome::Error(format!("未知のサブコマンド: {other}")),
+    }
+}
+
+fn parse_log_list(args: &[String]) -> ParseOutcome {
+    let mut tokens = match tokenize(args) {
+        Ok(t) => t,
+        Err(e) => return ParseOutcome::Error(e),
+    };
+    let global = extract_global(&mut tokens.flags);
+
+    if !tokens.positionals.is_empty() {
+        return ParseOutcome::Error(format!(
+            "log list は位置引数を取りません: {:?}",
+            tokens.positionals
+        ));
+    }
+
+    let from = take_flag(&mut tokens.flags, "from");
+    let to = take_flag(&mut tokens.flags, "to");
+    let project = take_flag(&mut tokens.flags, "project");
+
+    if let Some((k, _)) = tokens.flags.first() {
+        return ParseOutcome::Error(format!("log list: 未知のフラグ --{k}"));
+    }
+
+    ParseOutcome::Parsed(ParsedCli {
+        global,
+        command: CliCommand::LogList(LogListArgs { from, to, project }),
+    })
 }
 
 /// 共通: `--flag value` ペアと positional をフラットに分離。
@@ -939,6 +1011,114 @@ mod tests {
         match parse_args(&argv(&["app.exe", "project", "delete"])) {
             ParseOutcome::Error(_) => {}
             other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    // ── log サブコマンド ──
+
+    #[test]
+    fn is_cli_argv_detects_log_subcommand() {
+        assert!(is_cli_argv(&argv(&["app.exe", "log"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "log", "--help"])));
+        assert!(is_cli_argv(&argv(&["app.exe", "log", "list"])));
+    }
+
+    #[test]
+    fn log_help_flag_shows_help() {
+        match parse_args(&argv(&["app.exe", "log", "--help"])) {
+            ParseOutcome::Help(msg) => assert!(msg.contains("log")),
+            other => panic!("expected Help, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_without_subcommand_shows_help() {
+        match parse_args(&argv(&["app.exe", "log"])) {
+            ParseOutcome::Help(_) => {}
+            other => panic!("expected Help, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_unknown_subcommand_is_error() {
+        match parse_args(&argv(&["app.exe", "log", "unknown"])) {
+            ParseOutcome::Error(_) => {}
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_list_accepts_no_args() {
+        match parse_args(&argv(&["app.exe", "log", "list"])) {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(p.command, CliCommand::LogList(LogListArgs::default()));
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_list_accepts_from_to_project() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "log", "list", "--from", "2026-08-25", "--to", "2026-08-30", "--project",
+            "開発",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(
+                    p.command,
+                    CliCommand::LogList(LogListArgs {
+                        from: Some("2026-08-25".into()),
+                        to: Some("2026-08-30".into()),
+                        project: Some("開発".into()),
+                    })
+                );
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_list_accepts_only_from() {
+        let parsed = parse_args(&argv(&["app.exe", "log", "list", "--from", "2026-08-25"]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                let CliCommand::LogList(a) = p.command else {
+                    panic!("expected LogList");
+                };
+                assert_eq!(a.from.as_deref(), Some("2026-08-25"));
+                assert_eq!(a.to, None);
+            }
+            other => panic!("expected Parsed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_list_unknown_flag_errors() {
+        match parse_args(&argv(&["app.exe", "log", "list", "--xyz", "v"])) {
+            ParseOutcome::Error(m) => assert!(m.contains("xyz")),
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_list_rejects_positional_args() {
+        match parse_args(&argv(&["app.exe", "log", "list", "extra"])) {
+            ParseOutcome::Error(_) => {}
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn log_global_db_flag() {
+        let parsed = parse_args(&argv(&[
+            "app.exe", "log", "list", "--db", "/tmp/test.db",
+        ]));
+        match parsed {
+            ParseOutcome::Parsed(p) => {
+                assert_eq!(p.global.db_path.as_deref(), Some("/tmp/test.db"));
+            }
+            other => panic!("expected Parsed, got {other:?}"),
         }
     }
 

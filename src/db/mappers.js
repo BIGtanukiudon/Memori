@@ -32,3 +32,15 @@ export function rowToTask(r) {
         updatedAt: r.updated_at,
     };
 }
+export function rowToWorkLog(r) {
+    return {
+        id: r.id,
+        taskId: r.task_id,
+        projectId: r.project_id,
+        body: r.body,
+        taskTitle: r.task_title,
+        projectName: r.project_name,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+    };
+}

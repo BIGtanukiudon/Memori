@@ -50,6 +50,12 @@ pub fn run() {
             sql: include_str!("../migrations/003_done_column.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "create work_logs table",
+            sql: include_str!("../migrations/004_work_logs.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

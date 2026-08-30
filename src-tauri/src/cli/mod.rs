@@ -7,6 +7,7 @@
 //! [`try_dispatch`] が `Some(exit_code)` を返したら GUI を起動せず終了する。
 
 pub mod args;
+pub mod date_range;
 pub mod db;
 pub mod output;
 
@@ -144,6 +145,36 @@ fn execute(p: args::ParsedCli) -> i32 {
                 1
             }
         },
+        args::CliCommand::LogList(l) => {
+            let today = date_range::today_local();
+            let from = l.from.unwrap_or_else(|| today.clone());
+            let to = l.to.unwrap_or(today);
+            let (from_utc, to_utc) = match date_range::local_date_range_to_utc(&from, &to) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    return 2;
+                }
+            };
+            match db::list_work_logs(
+                &conn,
+                &from_utc,
+                &to_utc,
+                db::WorkLogListFilter {
+                    project: l.project.as_deref(),
+                },
+            ) {
+                Ok(rows) => {
+                    let offset = *chrono::Local::now().offset();
+                    print!("{}", output::format_log_list(&rows, &from, &to, offset));
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    1
+                }
+            }
+        }
         args::CliCommand::ProjectDelete(a) => match db::delete_project(&conn, &a.id, a.force) {
             Ok(r) => {
                 println!(
@@ -277,6 +308,88 @@ mod tests {
             try_dispatch(&argv(&["app.exe", "project", "unknown"])),
             Some(2)
         );
+    }
+
+    // ── log 統合テスト ──
+
+    #[test]
+    fn log_help_returns_zero() {
+        assert_eq!(try_dispatch(&argv(&["app.exe", "log", "--help"])), Some(0));
+    }
+
+    #[test]
+    fn log_unknown_subcommand_returns_two() {
+        assert_eq!(
+            try_dispatch(&argv(&["app.exe", "log", "unknown"])),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn end_to_end_log_list_project_task_and_log() {
+        let tmp = std::env::temp_dir().join(format!("memori-cli-log-{}.sqlite", ulid::Ulid::new()));
+        let path_str = tmp.to_string_lossy().to_string();
+
+        {
+            let conn = db::open_db(&tmp).unwrap();
+            db::init_schema_for_test(&conn).unwrap();
+        }
+
+        // project add
+        let code = try_dispatch(&argv(&[
+            "app.exe", "project", "add", "--db", &path_str, "--name", "開発",
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        // task add
+        let code = try_dispatch(&argv(&[
+            "app.exe", "task", "add", "--db", &path_str, "--title", "作業ログ機能を実装",
+            "--project", "開発", "--status", "Todo",
+        ]))
+        .unwrap();
+        assert_eq!(code, 0);
+
+        let task_id: String = {
+            let conn = db::open_db(&tmp).unwrap();
+            conn.query_row("SELECT id FROM tasks LIMIT 1", [], |r| r.get(0))
+                .unwrap()
+        };
+
+        // 作業ログを直接挿入(CLIには log add が無いため)
+        {
+            use rusqlite::params;
+            let conn = db::open_db(&tmp).unwrap();
+            let today = date_range::today_local();
+            let ts = format!("{today}T01:00:00.000Z");
+            conn.execute(
+                "INSERT INTO work_logs (id, task_id, project_id, body, task_title, project_name, created_at, updated_at)\
+                 SELECT 'L1', t.id, t.project_id, '実装を進めた', t.title, p.name, ?, ?\
+                 FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
+                params![ts, ts, task_id],
+            )
+            .unwrap();
+        }
+
+        // log list (今日, 期間省略) で拾える
+        let code = try_dispatch(&argv(&["app.exe", "log", "list", "--db", &path_str])).unwrap();
+        assert_eq!(code, 0);
+
+        // 実際の出力内容も検証
+        let rows = {
+            let conn = db::open_db(&tmp).unwrap();
+            let today = date_range::today_local();
+            let (from_utc, to_utc) = date_range::local_date_range_to_utc(&today, &today).unwrap();
+            db::list_work_logs(&conn, &from_utc, &to_utc, db::WorkLogListFilter::default())
+                .unwrap()
+        };
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].body, "実装を進めた");
+        assert_eq!(rows[0].task_title, "作業ログ機能を実装");
+        assert_eq!(rows[0].project_name, "開発");
+        assert!(!rows[0].task_deleted);
+
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[test]

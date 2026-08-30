@@ -17,3 +17,16 @@ export function isOverdue(iso, now = new Date()) {
         return false;
     return iso < todayIso(now);
 }
+function pad2(n) {
+    return String(n).padStart(2, "0");
+}
+export function formatWorkLogTimestamp(iso, now = new Date()) {
+    const d = new Date(iso);
+    const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    const sameDay = d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+    if (sameDay)
+        return hm;
+    return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${hm}`;
+}

@@ -1,4 +1,4 @@
-import type { Column, Project, Task } from "@/types/domain";
+import type { Column, Project, Task, WorkLog } from "@/types/domain";
 import { parsePriority } from "@/lib/priority";
 
 export interface ProjectRow {
@@ -62,6 +62,30 @@ export function rowToTask(r: TaskRow): Task {
     priority: parsePriority(r.priority),
     position: r.position,
     completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export interface WorkLogRow {
+  id: string;
+  task_id: string;
+  project_id: string;
+  body: string;
+  task_title: string;
+  project_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function rowToWorkLog(r: WorkLogRow): WorkLog {
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    projectId: r.project_id,
+    body: r.body,
+    taskTitle: r.task_title,
+    projectName: r.project_name,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

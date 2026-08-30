@@ -8,6 +8,7 @@ import { getDb } from "@/db/connection";
 import { countTasksInColumn, createColumnAction, deleteColumnCascadeAction, deleteColumnAfterMoveAction, renameColumnAction, reorderColumnsAction, } from "@/data/columnActions";
 import { createTaskAction, deleteTaskAction, moveTaskAction, updateTaskAction, } from "@/data/taskActions";
 import { setDoneColumnAction } from "@/data/projectActions";
+import { useWorkLogs } from "@/data/useWorkLogs";
 import { computeColumnReorder, computeTaskMove } from "@/lib/dnd";
 import { KanbanColumn } from "./KanbanColumn";
 import { DeleteColumnDialog } from "./DeleteColumnDialog";
@@ -21,6 +22,7 @@ export function KanbanBoard() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [editingTaskId, setEditingTaskId] = useState(null);
     const editingTask = useBoardStore((s) => editingTaskId ? s.tasks.find((t) => t.id === editingTaskId) ?? null : null);
+    const editingWorkLogs = useWorkLogs(editingTaskId);
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
     if (!currentProject) {
         return (_jsx("div", { className: "flex h-full items-center justify-center text-sm text-gray-500", children: "\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044" }));
@@ -135,5 +137,5 @@ export function KanbanBoard() {
     return (_jsx(DndContext, { sensors: sensors, collisionDetection: closestCorners, onDragEnd: (e) => void handleDragEnd(e), children: _jsxs("div", { className: "flex h-full gap-4 overflow-x-auto p-4", children: [_jsx(SortableContext, { items: columns.map((c) => c.id), strategy: horizontalListSortingStrategy, children: columns.map((c) => (_jsx(KanbanColumn, { column: c, tasks: tasksByColumn.get(c.id) ?? [], onRename: (id, name) => void handleRename(id, name), onRequestDelete: (col) => void handleRequestDelete(col), onAddTask: (columnId, title) => void handleAddTask(columnId, title), onTaskClick: (t) => setEditingTaskId(t.id), isDoneColumn: currentProject?.doneColumnId === c.id, onSetDoneColumn: (id) => void handleSetDoneColumn(id), draggable: true }, c.id))) }), _jsx("div", { className: "w-72 shrink-0", children: adding ? (_jsx("input", { autoFocus: true, value: newName, placeholder: "\u5217\u540D", onChange: (e) => setNewName(e.target.value), onKeyDown: handleAddKey, onBlur: () => void handleAddColumn(), className: "w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm outline-none focus:border-gray-500" })) : (_jsx("button", { type: "button", "aria-label": "\u5217\u3092\u8FFD\u52A0", onClick: () => {
                             setAdding(true);
                             setNewName("");
-                        }, className: "w-full rounded-lg border border-dashed border-gray-300 bg-white/50 px-3 py-2 text-sm text-gray-500 hover:bg-white", children: "\uFF0B \u5217\u3092\u8FFD\u52A0" })) }), deleteTarget && (_jsx(DeleteColumnDialog, { open: true, column: deleteTarget.column, otherColumns: columns.filter((c) => c.id !== deleteTarget.column.id), taskCount: deleteTarget.taskCount, onCascade: () => void handleCascade(), onMoveAndDelete: (id) => void handleMoveAndDelete(id), onCancel: () => setDeleteTarget(null) })), _jsx(TaskDetailDialog, { open: !!editingTask, task: editingTask, onSave: (patch) => void handleSaveTask(patch), onDelete: () => void handleDeleteTask(), onClose: () => setEditingTaskId(null) })] }) }));
+                        }, className: "w-full rounded-lg border border-dashed border-gray-300 bg-white/50 px-3 py-2 text-sm text-gray-500 hover:bg-white", children: "\uFF0B \u5217\u3092\u8FFD\u52A0" })) }), deleteTarget && (_jsx(DeleteColumnDialog, { open: true, column: deleteTarget.column, otherColumns: columns.filter((c) => c.id !== deleteTarget.column.id), taskCount: deleteTarget.taskCount, onCascade: () => void handleCascade(), onMoveAndDelete: (id) => void handleMoveAndDelete(id), onCancel: () => setDeleteTarget(null) })), _jsx(TaskDetailDialog, { open: !!editingTask, task: editingTask, onSave: (patch) => void handleSaveTask(patch), onDelete: () => void handleDeleteTask(), onClose: () => setEditingTaskId(null), workLogs: editingWorkLogs.workLogs, onAddWorkLog: (body) => void editingWorkLogs.addWorkLog(body), onUpdateWorkLog: (id, body) => void editingWorkLogs.updateWorkLog(id, body), onDeleteWorkLog: (id) => void editingWorkLogs.deleteWorkLog(id) })] }) }));
 }

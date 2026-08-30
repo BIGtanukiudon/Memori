@@ -12,8 +12,9 @@ Windowsデスクトップ向けのカンバンタスク管理ツール。プロ�
 - **タスク詳細編集**: タイトル・メモ・期日・優先度をモーダルで編集
 - **クイック入力ウィンドウ**: `app.exe --quick` で呼び出せる軽量入力ウィンドウ（AHK等のホットキーから利用）
 - **全タスク一覧ビュー**: プロジェクト横断でフィルタ・ソート可能なリストビュー
+- **作業ログ**: タスクに対して時系列で作業記録を書き足せる。タスク詳細モーダルから追加・編集・削除。日報・週報の材料としてCLI経由でAIに読ませることを主目的とする
 - **シングルインスタンス制御**: 2重起動を防ぎ、既存プロセスへ argv を受け渡し
-- **CLIサブコマンド**: `app.exe task add/list/move/done` と `app.exe project add/list/rename/delete` でAIエージェント（Claude Code等）や任意スクリプトからタスク・プロジェクト操作
+- **CLIサブコマンド**: `app.exe task add/list/move/done`、`app.exe project add/list/rename/delete`、`app.exe log list` でAIエージェント（Claude Code等）や任意スクリプトからタスク・プロジェクト・作業ログ操作
 
 ## 技術スタック
 
@@ -57,8 +58,9 @@ SQLite上の主要テーブル（IDはすべてULID／TEXT）:
 | `projects` | `id`, `name`, `position`, `done_column_id`, `created_at`, `updated_at` | プロジェクト（大項目）。`position` で表示順を管理。`done_column_id` は完了列（nullable、最大1つ） |
 | `columns`  | `id`, `project_id`, `name`, `position` | カンバンの列（ステータス）。`project_id` に対し `ON DELETE CASCADE` |
 | `tasks`    | `id`, `project_id`, `column_id`, `title`, `memo`, `due_date`, `priority`, `position`, `completed_at`, `created_at`, `updated_at` | `column_id` に対し `ON DELETE CASCADE`。`priority` は `0:なし / 1:低 / 2:中 / 3:高`。`completed_at` は完了列移動時に自動記録 |
+| `work_logs` | `id`, `task_id`, `project_id`, `body`, `task_title`, `project_name`, `created_at`, `updated_at` | タスクに対する時系列の作業記録。`task_id` / `project_id` に**外部キーを張らない**（タスク削除後も日報の材料として残すため）。`task_title` / `project_name` は記録時点のスナップショットで、表示時は現存タスク・プロジェクトの名前を優先し、無ければスナップショットにフォールバックする |
 
-DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_init.sql)。完了列関連は [`003_done_column.sql`](./src-tauri/migrations/003_done_column.sql)。並び順は同列内 `position` を 0始まりで再採番するシンプル方式。
+DDL本体は [`src-tauri/migrations/001_init.sql`](./src-tauri/migrations/001_init.sql)。完了列関連は [`003_done_column.sql`](./src-tauri/migrations/003_done_column.sql)。作業ログは [`004_work_logs.sql`](./src-tauri/migrations/004_work_logs.sql)（設計判断の詳細は [ADR-0002](./docs/adr/0002-worklog-survives-task-deletion.md)）。並び順は同列内 `position` を 0始まりで再採番するシンプル方式。
 
 ## ウィンドウ構成
 
@@ -241,6 +243,45 @@ app.exe project --help
 | `rename` | `<id>` / `--name` | — |
 | `delete` | `<id>` | `--force`（タスクありでも強制削除） |
 
+## CLI（`app.exe log ...`）
+
+作業ログを期間指定でMarkdown出力します。「今日の日報作って」の一言でAIエージェントが `log list` を叩いて要約できることを主目的としています。`task` / `project` と同様、GUIを起動せずSQLiteを直接読み取ります。
+
+```bash
+# 今日の作業ログ（--from / --to 省略時はローカル日付の今日）
+app.exe log list
+
+# 期間指定（ローカル日付。--from のみ／--to のみも可）
+app.exe log list --from 2026-08-25 --to 2026-08-30
+
+# プロジェクトで絞り込み（名前またはID）
+app.exe log list --project "開発"
+
+# ヘルプ
+app.exe log --help
+```
+
+| サブコマンド | 必須引数 | 任意引数 |
+|---|---|---|
+| `list` | （なし） | `--from YYYY-MM-DD` / `--to YYYY-MM-DD` / `--project <名前またはID>` |
+
+出力例:
+
+```markdown
+# 作業ログ 2026-08-30
+
+## 開発
+
+### APIのリトライ処理を実装
+- 09:15 仕様を確認。既存の指数バックオフを流用できそう
+- 11:40 実装完了。タイムアウト時のテストが1件落ちる
+
+### DBマイグレーション整理 (削除済み)
+- 14:02 004に統合して不要になったので削除
+```
+
+該当する作業ログが無い場合は `(該当する作業ログなし)` を出力します。`--from` / `--to` はローカル日付として受け取り、内部でUTCの半開区間に変換して比較するため、JST日付境界（00:00〜09:00）の記録が前日扱いになる問題はありません（[`cli/date_range.rs`](./src-tauri/src/cli/date_range.rs)）。
+
 ## 実装ステータス
 
 | # | 内容 | 状態 |
@@ -253,9 +294,12 @@ app.exe project --help
 | 6 | クイック入力ウィンドウ | ✅ |
 | 7 | シングルインスタンス制御 + AHK連携 | ✅ |
 | 8 | 全タスク一覧ビュー | ✅ |
-| 9 | CLIサブコマンド (`app.exe task ...` / `app.exe project ...`) | ✅ |
+| 9 | CLIサブコマンド (`app.exe task ...` / `app.exe project ...` / `app.exe log ...`) | ✅ |
 | 10 | 完了列機能（カラムを完了列に指定、タスク移動時に `completedAt` 自動記録） | ✅ |
-| 11 | MCPサーバー実装 | 未着手 |
+| 11 | 作業ログ（タスク詳細モーダルでの追加・編集・削除、`app.exe log list` によるMarkdown出力） | ✅ |
+| 12 | 作業ログ: クイック入力ウィンドウのログモード（`--quick-log`） | 未着手（対象タスク指定方法が未決） |
+| 13 | 作業ログ: アプリ内タイムラインビュー | 未着手 |
+| 14 | MCPサーバー実装 | 未着手 |
 
 ## ライセンス
 

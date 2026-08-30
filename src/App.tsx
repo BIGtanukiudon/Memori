@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { AllTasksView } from "@/components/AllTasksView";
 import { TaskDetailDialog, type TaskDetailPatch } from "@/components/TaskDetailDialog";
+import { useWorkLogs } from "@/data/useWorkLogs";
 import { isTauriRuntime } from "@/lib/window";
 import type { Column, Task } from "@/types/domain";
 
@@ -36,6 +37,7 @@ export function App() {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [allEditingTaskId, setAllEditingTaskId] = useState<string | null>(null);
   const allEditingTask = allTasks.find((t) => t.id === allEditingTaskId) ?? null;
+  const allEditingWorkLogs = useWorkLogs(allEditingTaskId);
 
   // 初回: プロジェクト一覧を取得、最初のプロジェクトを選択
   useEffect(() => {
@@ -201,6 +203,10 @@ export function App() {
         onSave={(patch) => void handleAllSave(patch)}
         onDelete={() => void handleAllDelete()}
         onClose={() => setAllEditingTaskId(null)}
+        workLogs={allEditingWorkLogs.workLogs}
+        onAddWorkLog={(body) => void allEditingWorkLogs.addWorkLog(body)}
+        onUpdateWorkLog={(id, body) => void allEditingWorkLogs.updateWorkLog(id, body)}
+        onDeleteWorkLog={(id) => void allEditingWorkLogs.deleteWorkLog(id)}
       />
     </div>
   );

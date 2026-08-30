@@ -32,6 +32,16 @@ vi.mock("@/data/taskActions", () => ({
 vi.mock("@/data/projectActions", () => ({
     setDoneColumnAction: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/data/useWorkLogs", () => ({
+    useWorkLogs: () => ({
+        workLogs: [],
+        loading: false,
+        addWorkLog: vi.fn(),
+        updateWorkLog: vi.fn(),
+        deleteWorkLog: vi.fn(),
+        reload: vi.fn(),
+    }),
+}));
 const project = {
     id: "P",
     name: "開発",

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatDueDate, isOverdue, todayIso } from "./date";
+import { formatDueDate, formatWorkLogTimestamp, isOverdue, todayIso } from "./date";
 
 describe("formatDueDate", () => {
   it("ISO 8601日付を YYYY/MM/DD 形式に変換する", () => {
@@ -43,6 +43,27 @@ describe("isOverdue", () => {
     expect(isOverdue(null)).toBe(false);
     expect(isOverdue(undefined)).toBe(false);
     expect(isOverdue("")).toBe(false);
+  });
+});
+
+describe("formatWorkLogTimestamp", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // 2026-05-12 12:00 ローカル時間を「今」とする
+    vi.setSystemTime(new Date(2026, 4, 12, 12, 0, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("当日はHH:mm形式", () => {
+    const iso = new Date(2026, 4, 12, 9, 5, 0).toISOString();
+    expect(formatWorkLogTimestamp(iso)).toBe("09:05");
+  });
+
+  it("当日以外はMM/DD HH:mm形式", () => {
+    const iso = new Date(2026, 4, 10, 14, 30, 0).toISOString();
+    expect(formatWorkLogTimestamp(iso)).toBe("05/10 14:30");
   });
 });
 

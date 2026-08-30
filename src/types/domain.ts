@@ -29,3 +29,14 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface WorkLog {
+  id: string;
+  taskId: string;
+  projectId: string;
+  body: string;
+  taskTitle: string;
+  projectName: string;
+  createdAt: string;
+  updatedAt: string;
+}

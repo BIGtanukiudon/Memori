@@ -34,6 +34,7 @@ import {
   updateTaskAction,
 } from "@/data/taskActions";
 import { setDoneColumnAction } from "@/data/projectActions";
+import { useWorkLogs } from "@/data/useWorkLogs";
 import { computeColumnReorder, computeTaskMove } from "@/lib/dnd";
 import type { Column } from "@/types/domain";
 import { KanbanColumn } from "./KanbanColumn";
@@ -54,6 +55,7 @@ export function KanbanBoard() {
   const editingTask = useBoardStore((s) =>
     editingTaskId ? s.tasks.find((t) => t.id === editingTaskId) ?? null : null,
   );
+  const editingWorkLogs = useWorkLogs(editingTaskId);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -250,6 +252,10 @@ export function KanbanBoard() {
         onSave={(patch) => void handleSaveTask(patch)}
         onDelete={() => void handleDeleteTask()}
         onClose={() => setEditingTaskId(null)}
+        workLogs={editingWorkLogs.workLogs}
+        onAddWorkLog={(body) => void editingWorkLogs.addWorkLog(body)}
+        onUpdateWorkLog={(id, body) => void editingWorkLogs.updateWorkLog(id, body)}
+        onDeleteWorkLog={(id) => void editingWorkLogs.deleteWorkLog(id)}
       />
       </div>
     </DndContext>
