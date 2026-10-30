@@ -74,14 +74,19 @@ export function App() {
     const refetchAllTasks = useCallback(async () => {
         try {
             const db = await getDb();
-            const [cols, ts] = await Promise.all([listAllColumns(db), listTasks(db)]);
+            const [ps, cols, ts] = await Promise.all([
+                listProjects(db),
+                listAllColumns(db),
+                listTasks(db),
+            ]);
+            setProjects(ps);
             setAllColumns(cols);
             setAllTasks(ts);
         }
         catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
-    }, []);
+    }, [setProjects]);
     // currentProjectIdの変化に応じて列とタスクを取得
     useEffect(() => {
         if (!currentProjectId) {

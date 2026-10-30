@@ -53,8 +53,8 @@ export function AllTasksView({
   }, [columns, filter.projectId]);
 
   const filteredTasks = useMemo(
-    () => applyTaskSort(applyTaskFilter(tasks, filter), sort),
-    [tasks, filter, sort],
+    () => applyTaskSort(applyTaskFilter(tasks, filter, projects), sort),
+    [tasks, filter, projects, sort],
   );
 
   return (
@@ -105,6 +105,15 @@ export function AllTasksView({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-1 py-1 text-gray-600">
+          <input
+            type="checkbox"
+            checked={filter.excludeDone}
+            onChange={(e) => setFilter((f) => ({ ...f, excludeDone: e.target.checked }))}
+          />
+          <span>完了列のタスクを除外</span>
         </label>
 
         <label className="flex flex-col">

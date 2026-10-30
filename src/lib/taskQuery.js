@@ -5,11 +5,15 @@ export const EMPTY_TASK_FILTER = {
     priority: null,
     due: "all",
     search: "",
+    excludeDone: false,
 };
-export function applyTaskFilter(tasks, filter) {
+export function applyTaskFilter(tasks, filter, projects = []) {
     const today = todayIso();
     const search = filter.search.trim().toLowerCase();
+    const doneColumnByProject = new Map(projects.map((p) => [p.id, p.doneColumnId]));
     return tasks.filter((t) => {
+        if (filter.excludeDone && doneColumnByProject.get(t.projectId) === t.columnId)
+            return false;
         if (filter.projectId !== null && t.projectId !== filter.projectId)
             return false;
         if (filter.columnId !== null && t.columnId !== filter.columnId)

@@ -7,7 +7,7 @@ import {
   type TaskSort,
   type DueFilter,
 } from "./taskQuery";
-import type { Task } from "@/types/domain";
+import type { Project, Task } from "@/types/domain";
 
 const t = (overrides: Partial<Task>): Task => ({
   id: "id",
@@ -46,7 +46,60 @@ const empty: TaskFilter = {
   priority: null,
   due: "all",
   search: "",
+  excludeDone: false,
 };
+
+describe("applyTaskFilter - 完了列のタスクを除外", () => {
+  const projects: Project[] = [
+    { id: "P1", name: "開発", position: 0, doneColumnId: "C2", createdAt: "", updatedAt: "" },
+    { id: "P2", name: "個人", position: 1, doneColumnId: "C3", createdAt: "", updatedAt: "" },
+  ];
+
+  it("各タスクの所属プロジェクトの完了列を除外する", () => {
+    expect(applyTaskFilter(tasks, { ...empty, excludeDone: true }, projects).map((x) => x.id))
+      .toEqual(["A"]);
+  });
+
+  it("除外がOFFなら完了列のタスクも含める", () => {
+    expect(applyTaskFilter(tasks, empty, projects).map((x) => x.id)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("完了列が未設定、または所属プロジェクトの情報がないタスクは除外しない", () => {
+    const withoutDone = [{ ...projects[0]!, doneColumnId: null }];
+    expect(applyTaskFilter(tasks, { ...empty, excludeDone: true }, withoutDone).map((x) => x.id))
+      .toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("完了日時の有無によらず現在の所属列で判定する", () => {
+    const items = [
+      t({ id: "通常列", columnId: "C1", completedAt: "2026-05-13T00:00:00.000Z" }),
+      t({ id: "完了列", columnId: "C2", completedAt: null }),
+      t({ id: "他プロジェクト", projectId: "P3", columnId: "C2" }),
+    ];
+    expect(applyTaskFilter(items, { ...empty, excludeDone: true }, projects).map((x) => x.id))
+      .toEqual(["通常列", "他プロジェクト"]);
+  });
+
+  it("プロジェクト・列・優先度・期日・検索とAND条件で適用する", () => {
+    const match = t({
+      id: "対象", title: "対象タスク", priority: Priority.High, dueDate: "2026-05-13",
+    });
+    const items = [
+      match,
+      { ...match, id: "完了", columnId: "C2" },
+      { ...match, id: "別プロジェクト", projectId: "P2" },
+      { ...match, id: "別の列", columnId: "C4" },
+      { ...match, id: "低優先度", priority: Priority.Low },
+      { ...match, id: "期日なし", dueDate: null },
+      { ...match, id: "検索不一致", title: "別の作業" },
+    ];
+    const filter: TaskFilter = {
+      projectId: "P1", columnId: "C1", priority: Priority.High,
+      due: "today", search: "対象", excludeDone: true,
+    };
+    expect(applyTaskFilter(items, filter, projects).map((x) => x.id)).toEqual(["対象"]);
+  });
+});
 
 describe("applyTaskFilter - projectId", () => {
   it("nullなら全件", () => {

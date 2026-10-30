@@ -1,4 +1,4 @@
-import type { Task } from "@/types/domain";
+import type { Project, Task } from "@/types/domain";
 import type { Priority } from "./priority";
 import { isOverdue, todayIso } from "./date";
 
@@ -10,6 +10,7 @@ export interface TaskFilter {
   priority: Priority | null;
   due: DueFilter;
   search: string;
+  excludeDone: boolean;
 }
 
 export type SortKey = "due" | "priority" | "updated" | "created";
@@ -25,12 +26,19 @@ export const EMPTY_TASK_FILTER: TaskFilter = {
   priority: null,
   due: "all",
   search: "",
+  excludeDone: false,
 };
 
-export function applyTaskFilter(tasks: Task[], filter: TaskFilter): Task[] {
+export function applyTaskFilter(
+  tasks: Task[],
+  filter: TaskFilter,
+  projects: Project[] = [],
+): Task[] {
   const today = todayIso();
   const search = filter.search.trim().toLowerCase();
+  const doneColumnByProject = new Map(projects.map((p) => [p.id, p.doneColumnId]));
   return tasks.filter((t) => {
+    if (filter.excludeDone && doneColumnByProject.get(t.projectId) === t.columnId) return false;
     if (filter.projectId !== null && t.projectId !== filter.projectId) return false;
     if (filter.columnId !== null && t.columnId !== filter.columnId) return false;
     if (filter.priority !== null && t.priority !== filter.priority) return false;
